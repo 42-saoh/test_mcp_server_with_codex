@@ -23,7 +23,8 @@ def test_mcp_analyze_extracts_tables_and_functions() -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert data["version"] == "0.1"
+    assert data["version"] == "0.2"
     assert data["errors"] == []
     assert set(data["references"]["tables"]) >= {"DBO.USERS", "SALES.ORDERS"}
     assert set(data["references"]["functions"]) >= {"COUNT", "YEAR", "FORMATNAME"}
+    assert "transactions" in data
