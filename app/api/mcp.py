@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from app.services.tsql_analyzer import (
     analyze_control_flow,
     analyze_data_changes,
+    analyze_error_handling,
     analyze_migration_impacts,
     analyze_references,
     analyze_transactions,
@@ -114,6 +115,28 @@ class DataChanges(BaseModel):
     notes: list[str]
 
 
+class ErrorHandling(BaseModel):
+    has_try_catch: bool
+    try_count: int
+    catch_count: int
+    uses_throw: bool
+    throw_count: int
+    uses_raiserror: bool
+    raiserror_count: int
+    uses_at_at_error: bool
+    at_at_error_count: int
+    uses_error_functions: list[str]
+    uses_print: bool
+    print_count: int
+    uses_return: bool
+    return_count: int
+    return_values: list[int]
+    uses_output_error_params: bool
+    output_error_params: list[str]
+    signals: list[str]
+    notes: list[str]
+
+
 class AnalyzeResponse(BaseModel):
     version: str
     references: References
@@ -121,6 +144,7 @@ class AnalyzeResponse(BaseModel):
     migration_impacts: MigrationImpacts
     control_flow: ControlFlow
     data_changes: DataChanges
+    error_handling: ErrorHandling
     errors: list[str]
 
 
@@ -131,13 +155,15 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     impacts = analyze_migration_impacts(request.sql)
     control_flow = analyze_control_flow(request.sql, request.dialect)
     data_changes = analyze_data_changes(request.sql, request.dialect)
+    error_handling = analyze_error_handling(request.sql)
     errors = result["errors"] + control_flow["errors"] + data_changes["errors"]
     return AnalyzeResponse(
-        version="0.5",
+        version="0.6",
         references=References(**result["references"]),
         transactions=TransactionSummary(**transactions),
         migration_impacts=MigrationImpacts(**impacts),
         control_flow=ControlFlow(**control_flow["control_flow"]),
         data_changes=DataChanges(**data_changes["data_changes"]),
+        error_handling=ErrorHandling(**error_handling),
         errors=errors,
     )
