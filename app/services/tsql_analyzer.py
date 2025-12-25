@@ -48,6 +48,19 @@ TRANCOUNT_PATTERN = re.compile(r"@@TRANCOUNT", re.IGNORECASE)
 XACT_STATE_PATTERN = re.compile(r"\bXACT_STATE\s*\(\s*\)", re.IGNORECASE)
 THROW_PATTERN = re.compile(r"\bTHROW\b", re.IGNORECASE)
 RAISERROR_PATTERN = re.compile(r"\bRAISERROR\b", re.IGNORECASE)
+ERROR_FUNCTION_PATTERN = re.compile(
+    r"\b(ERROR_NUMBER|ERROR_MESSAGE|ERROR_SEVERITY|ERROR_STATE|ERROR_LINE|ERROR_PROCEDURE)\s*\(",
+    re.IGNORECASE,
+)
+PRINT_PATTERN = re.compile(r"\bPRINT\b", re.IGNORECASE)
+RETURN_PATTERN = re.compile(r"\bRETURN\b", re.IGNORECASE)
+RETURN_VALUE_PATTERN = re.compile(r"\bRETURN\s+(-?\d+)\b", re.IGNORECASE)
+OUTPUT_PARAM_PATTERN = re.compile(r"(@[\w$#]+)[^,\n]*\bOUTPUT\b", re.IGNORECASE)
+SET_SELECT_ASSIGN_PATTERN = re.compile(r"\b(?:SET|SELECT)\s+(@[\w$#]+)\s*=", re.IGNORECASE)
+ERROR_PARAM_NAME_PATTERN = re.compile(
+    r"@(?:err|error)(?:msg|message|code)?|@errmsg|@err_msg|@errcode|@errorcode",
+    re.IGNORECASE,
+)
 
 DYNAMIC_SQL_EXEC_PATTERN = re.compile(r"\bEXEC(?:UTE)?\s*\(?\s*@\w+", re.IGNORECASE)
 DYNAMIC_SQL_LITERAL_PATTERN = re.compile(r"\bEXEC(?:UTE)?\s*(?:\(|\s)\s*N?'", re.IGNORECASE)
@@ -618,6 +631,138 @@ def analyze_data_changes(sql: str, dialect: str = "tsql") -> dict[str, object]:
             "notes": notes,
         },
         "errors": errors,
+    }
+
+
+def analyze_error_handling(sql: str) -> dict[str, object]:
+    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
+    logger.info("analyze_error_handling: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+
+    stripped = _strip_sql_comments(sql)
+
+    try_count = len(TRY_PATTERN.findall(stripped))
+    catch_count = len(CATCH_PATTERN.findall(stripped))
+    has_try_catch = try_count > 0 and catch_count > 0
+
+    throw_count = len(THROW_PATTERN.findall(stripped))
+    uses_throw = throw_count > 0
+
+    raiserror_count = len(RAISERROR_PATTERN.findall(stripped))
+    uses_raiserror = raiserror_count > 0
+
+    at_at_error_count = len(AT_AT_ERROR_PATTERN.findall(stripped))
+    uses_at_at_error = at_at_error_count > 0
+
+    uses_error_functions: list[str] = []
+    seen_error_functions: set[str] = set()
+    for match in ERROR_FUNCTION_PATTERN.finditer(stripped):
+        name = match.group(1).upper()
+        if name in seen_error_functions:
+            continue
+        seen_error_functions.add(name)
+        uses_error_functions.append(name)
+    if XACT_STATE_PATTERN.search(stripped) and "XACT_STATE" not in seen_error_functions:
+        uses_error_functions.append("XACT_STATE")
+        seen_error_functions.add("XACT_STATE")
+
+    print_count = len(PRINT_PATTERN.findall(stripped))
+    uses_print = print_count > 0
+
+    return_count = len(RETURN_PATTERN.findall(stripped))
+    uses_return = return_count > 0
+
+    return_values_set: set[int] = set()
+    for match in RETURN_VALUE_PATTERN.finditer(stripped):
+        try:
+            return_values_set.add(int(match.group(1)))
+        except ValueError:
+            continue
+        if len(return_values_set) >= 10:
+            break
+    return_values = sorted(return_values_set)
+
+    output_error_params_set: set[str] = set()
+
+    def maybe_add_error_param(name: str) -> None:
+        if not ERROR_PARAM_NAME_PATTERN.search(name):
+            return
+        output_error_params_set.add(name.upper())
+
+    for match in OUTPUT_PARAM_PATTERN.finditer(stripped):
+        maybe_add_error_param(match.group(1))
+        if len(output_error_params_set) >= 10:
+            break
+
+    if len(output_error_params_set) < 10:
+        for match in SET_SELECT_ASSIGN_PATTERN.finditer(stripped):
+            maybe_add_error_param(match.group(1))
+            if len(output_error_params_set) >= 10:
+                break
+
+    output_error_params = sorted(output_error_params_set)
+    uses_output_error_params = bool(output_error_params)
+
+    signals: list[str] = []
+    seen_signals: set[str] = set()
+
+    def add_signal(signal: str) -> None:
+        if signal in seen_signals or len(seen_signals) >= 15:
+            return
+        seen_signals.add(signal)
+        signals.append(signal)
+
+    if has_try_catch:
+        add_signal("TRY/CATCH")
+    if uses_throw:
+        add_signal("THROW")
+    if uses_raiserror:
+        add_signal("RAISERROR")
+    if uses_at_at_error:
+        add_signal("@@ERROR")
+    for func_name in uses_error_functions:
+        add_signal(func_name)
+    if uses_print:
+        add_signal("PRINT")
+    if uses_return:
+        add_signal("RETURN")
+    if uses_output_error_params:
+        add_signal("OUTPUT_ERR_PARAM")
+
+    notes: list[str] = []
+    if uses_raiserror:
+        notes.append("RAISERROR detected; map to exception throwing in Java.")
+    if uses_at_at_error:
+        notes.append("Legacy @@ERROR handling detected; refactor likely needed.")
+
+    uses_transaction = bool(
+        BEGIN_TRAN_PATTERN.search(stripped)
+        or COMMIT_TRAN_PATTERN.search(stripped)
+        or ROLLBACK_TRAN_PATTERN.search(stripped)
+        or SAVE_TRAN_PATTERN.search(stripped)
+    )
+    if has_try_catch and uses_transaction:
+        notes.append("TRY/CATCH with transactions detected; ensure rollback mapping.")
+
+    return {
+        "has_try_catch": has_try_catch,
+        "try_count": try_count,
+        "catch_count": catch_count,
+        "uses_throw": uses_throw,
+        "throw_count": throw_count,
+        "uses_raiserror": uses_raiserror,
+        "raiserror_count": raiserror_count,
+        "uses_at_at_error": uses_at_at_error,
+        "at_at_error_count": at_at_error_count,
+        "uses_error_functions": uses_error_functions,
+        "uses_print": uses_print,
+        "print_count": print_count,
+        "uses_return": uses_return,
+        "return_count": return_count,
+        "return_values": return_values,
+        "uses_output_error_params": uses_output_error_params,
+        "output_error_params": output_error_params,
+        "signals": signals,
+        "notes": notes,
     }
 
 
