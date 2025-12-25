@@ -1,0 +1,8 @@
+ruff
+pytest
+pytest-asyncio
+httpx
+pytest-cov
+mypy
+types-python-dateutil
+types-requests
