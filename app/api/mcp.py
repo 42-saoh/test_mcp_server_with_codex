@@ -11,6 +11,15 @@ from app.services.tsql_analyzer import (
     analyze_references,
     analyze_transactions,
 )
+from app.services.tsql_callers import (
+    CallerOptions as ServiceCallerOptions,
+)
+from app.services.tsql_callers import (
+    SqlObject as ServiceSqlObject,
+)
+from app.services.tsql_callers import (
+    find_callers,
+)
 
 router = APIRouter()
 
@@ -148,6 +157,53 @@ class AnalyzeResponse(BaseModel):
     errors: list[str]
 
 
+class CallersOptions(BaseModel):
+    case_insensitive: bool = True
+    schema_sensitive: bool = False
+    include_self: bool = False
+
+
+class CallersObject(BaseModel):
+    name: str
+    type: str
+    sql: str
+
+
+class CallersRequest(BaseModel):
+    target: str
+    target_type: str | None = None
+    objects: list[CallersObject]
+    options: CallersOptions = Field(default_factory=CallersOptions)
+
+
+class CallersTarget(BaseModel):
+    name: str
+    type: str
+    normalized: str
+
+
+class CallersSummary(BaseModel):
+    has_callers: bool
+    caller_count: int
+    total_calls: int
+
+
+class CallerResult(BaseModel):
+    name: str
+    type: str
+    call_count: int
+    call_kinds: list[str]
+    signals: list[str]
+
+
+class CallersResponse(BaseModel):
+    version: str
+    target: CallersTarget
+    summary: CallersSummary
+    callers: list[CallerResult]
+    errors: list[str]
+
+
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     result = analyze_references(request.sql, request.dialect)
@@ -167,3 +223,26 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
         error_handling=ErrorHandling(**error_handling),
         errors=errors,
     )
+
+
+@router.post("/callers", response_model=CallersResponse)
+def callers(request: CallersRequest) -> CallersResponse:
+    target_type = _infer_target_type(request.target, request.target_type)
+    service_objects = [
+        ServiceSqlObject(name=obj.name, type=obj.type, sql=obj.sql) for obj in request.objects
+    ]
+    service_options = ServiceCallerOptions(
+        case_insensitive=request.options.case_insensitive,
+        schema_sensitive=request.options.schema_sensitive,
+        include_self=request.options.include_self,
+    )
+    result = find_callers(request.target, target_type, service_objects, service_options)
+    return CallersResponse(**result)
+
+
+def _infer_target_type(target: str, target_type: str | None) -> str:
+    if target_type:
+        return target_type.lower()
+    if "(" in target:
+        return "function"
+    return "procedure"
