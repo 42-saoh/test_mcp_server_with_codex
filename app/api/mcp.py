@@ -20,6 +20,7 @@ from app.services.tsql_callers import (
 from app.services.tsql_callers import (
     find_callers,
 )
+from app.services.tsql_external_deps import analyze_external_dependencies
 
 router = APIRouter()
 
@@ -204,6 +205,74 @@ class CallersResponse(BaseModel):
     errors: list[str]
 
 
+class ExternalDepsOptions(BaseModel):
+    case_insensitive: bool = True
+    max_items: int = Field(200, ge=1)
+
+
+class ExternalDepsRequest(BaseModel):
+    name: str
+    type: str
+    sql: str
+    options: ExternalDepsOptions = Field(default_factory=ExternalDepsOptions)
+
+
+class ExternalDepsObject(BaseModel):
+    name: str
+    type: str
+
+
+class ExternalDepsSummary(BaseModel):
+    has_external_deps: bool
+    linked_server_count: int
+    cross_db_count: int
+    remote_exec_count: int
+    openquery_count: int
+    opendatasource_count: int
+
+
+class LinkedServerItem(BaseModel):
+    name: str
+    signals: list[str]
+
+
+class CrossDatabaseItem(BaseModel):
+    database: str
+    schema_: str = Field(..., alias="schema")
+    object: str
+    kind: str
+
+
+class TargetDependencyItem(BaseModel):
+    target: str
+    kind: str
+    signals: list[str]
+
+
+class OtherDependencyItem(BaseModel):
+    id: str
+    kind: str
+    signals: list[str]
+
+
+class ExternalDependencies(BaseModel):
+    linked_servers: list[LinkedServerItem]
+    cross_database: list[CrossDatabaseItem]
+    remote_exec: list[TargetDependencyItem]
+    openquery: list[TargetDependencyItem]
+    opendatasource: list[TargetDependencyItem]
+    others: list[OtherDependencyItem]
+
+
+class ExternalDepsResponse(BaseModel):
+    version: str
+    object: ExternalDepsObject
+    summary: ExternalDepsSummary
+    external_dependencies: ExternalDependencies
+    signals: list[str]
+    errors: list[str]
+
+
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     result = analyze_references(request.sql, request.dialect)
@@ -238,6 +307,20 @@ def callers(request: CallersRequest) -> CallersResponse:
     )
     result = find_callers(request.target, target_type, service_objects, service_options)
     return CallersResponse(**result)
+
+
+@router.post("/external-deps", response_model=ExternalDepsResponse)
+def external_deps(request: ExternalDepsRequest) -> ExternalDepsResponse:
+    result = analyze_external_dependencies(
+        request.sql,
+        options={
+            "case_insensitive": request.options.case_insensitive,
+            "max_items": request.options.max_items,
+            "name": request.name,
+            "type": request.type,
+        },
+    )
+    return ExternalDepsResponse(**result)
 
 
 def _infer_target_type(target: str, target_type: str | None) -> str:
