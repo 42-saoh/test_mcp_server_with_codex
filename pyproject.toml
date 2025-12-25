@@ -6,6 +6,9 @@ target-version = "py311"
 select = ["E", "F", "I", "B", "UP"]  # 기본 + import 정리 + 버그패턴 + pyupgrade
 ignore = ["E501"]                   # line-length는 formatter에 맡김
 
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
 [tool.ruff.format]
 quote-style = "double"
 
