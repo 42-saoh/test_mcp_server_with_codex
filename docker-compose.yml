@@ -1,0 +1,62 @@
+version: "3.9"
+
+networks:
+  backend:
+    driver: bridge
+    internal: true
+  frontend:
+    driver: bridge
+
+services:
+  mcp-python:
+    container_name: mcp-python
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "9700:9700"
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Seoul
+      MSSQL_HOST: ms_sql
+      MSSQL_PORT: "1433"
+    volumes:
+      - ./data:/data
+      - ./logs:/app/logs
+      - ./standards:/app/standards
+    depends_on:
+      ms_sql:
+        condition: service_healthy
+    networks:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+  ms_sql:
+    platform: linux/amd64
+    container_name: mssql-2017
+    image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
+      MSSQL_PID: "Developer"
+      TZ: Asia/Seoul
+      MSSQL_COLLATION: Korean_Wansung_CI_AS
+    ports:
+      - "1433:1433"   # 호스트에서 직접 접속 필요 없으면 주석 가능
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P $$MSSQL_SA_PASSWORD -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    volumes:
+      - ./ms_sql/data:/var/opt/mssql/data
+      - ./ms_sql/log:/var/opt/mssql/log
+      - ./ms_sql/secrets:/var/opt/mssql/secrets
+    networks:
+      backend:
+        aliases:
+          - mssql

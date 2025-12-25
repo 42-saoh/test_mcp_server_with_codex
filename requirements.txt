@@ -1,0 +1,17 @@
+# --- MCP 서버 ---
+mcp[cli]
+pydantic>=2
+
+# --- T-SQL 분석/그래프 ---
+sqlglot>=25
+networkx>=3
+pyodbc>=5
+
+# --- RAG (현재 프로젝트 구성 유지: LangChain + FAISS) ---
+python-dotenv
+openai
+langchain
+langchain-openai
+langchain-community
+faiss-cpu
+pypdf
