@@ -2,6 +2,10 @@
 mcp[cli]
 pydantic>=2
 
+# --- API 서버 런타임 ---
+fastapi>=0.110
+uvicorn[standard]>=0.30
+
 # --- T-SQL 분석/그래프 ---
 sqlglot>=25
 networkx>=3
