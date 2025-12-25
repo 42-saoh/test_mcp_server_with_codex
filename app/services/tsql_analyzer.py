@@ -83,6 +83,9 @@ OUTPUT_CLAUSE_PATTERN = re.compile(r"\bOUTPUT\b\s+(?:INSERTED|DELETED)\b", re.IG
 SCOPE_IDENTITY_PATTERN = re.compile(r"\bSCOPE_IDENTITY\s*\(\s*\)", re.IGNORECASE)
 AT_AT_IDENTITY_PATTERN = re.compile(r"@@IDENTITY\b", re.IGNORECASE)
 IDENT_CURRENT_PATTERN = re.compile(r"\bIDENT_CURRENT\s*\(", re.IGNORECASE)
+OUTPUT_PATTERN = re.compile(r"\bOUTPUT\b", re.IGNORECASE)
+INSERTED_PATTERN = re.compile(r"\bINSERTED\b", re.IGNORECASE)
+DELETED_PATTERN = re.compile(r"\bDELETED\b", re.IGNORECASE)
 
 GETDATE_PATTERN = re.compile(r"\bGETDATE\s*\(\s*\)", re.IGNORECASE)
 SYSDATETIME_PATTERN = re.compile(r"\bSYSDATETIME\s*\(\s*\)", re.IGNORECASE)
@@ -117,6 +120,24 @@ CONTROL_FLOW_NESTING_PATTERN = re.compile(
 
 CONTROL_FLOW_NODE_LIMIT = 200
 CONTROL_FLOW_EDGE_LIMIT = 400
+
+TABLE_NAME_PATTERN = re.compile(
+    r"(?P<table>(?:\[[^\]]+\]|[A-Za-z_][\w$#]*)"
+    r"(?:\s*\.\s*(?:\[[^\]]+\]|[A-Za-z_][\w$#]*)){0,2})",
+    re.IGNORECASE,
+)
+INSERT_PATTERN = re.compile(rf"\bINSERT\s+INTO\s+{TABLE_NAME_PATTERN.pattern}", re.IGNORECASE)
+UPDATE_PATTERN = re.compile(rf"\bUPDATE\s+{TABLE_NAME_PATTERN.pattern}", re.IGNORECASE)
+DELETE_PATTERN = re.compile(rf"\bDELETE\s+FROM\s+{TABLE_NAME_PATTERN.pattern}", re.IGNORECASE)
+DELETE_ALIAS_PATTERN = re.compile(
+    rf"\bDELETE\s+\w+\s+FROM\s+{TABLE_NAME_PATTERN.pattern}", re.IGNORECASE
+)
+MERGE_PATTERN_REGEX = re.compile(rf"\bMERGE\s+INTO\s+{TABLE_NAME_PATTERN.pattern}", re.IGNORECASE)
+TRUNCATE_PATTERN = re.compile(rf"\bTRUNCATE\s+TABLE\s+{TABLE_NAME_PATTERN.pattern}", re.IGNORECASE)
+SELECT_INTO_PATTERN = re.compile(
+    rf"\bSELECT\b[\s\S]*?\bINTO\s+{TABLE_NAME_PATTERN.pattern}",
+    re.IGNORECASE,
+)
 
 
 def analyze_references(sql: str, dialect: str = "tsql") -> dict[str, object]:
@@ -509,6 +530,97 @@ def analyze_control_flow(sql: str, dialect: str = "tsql") -> dict[str, object]:
     }
 
 
+def analyze_data_changes(sql: str, dialect: str = "tsql") -> dict[str, object]:
+    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
+    logger.info("analyze_data_changes: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+
+    operations = {
+        "insert": {"count": 0, "tables": []},
+        "update": {"count": 0, "tables": []},
+        "delete": {"count": 0, "tables": []},
+        "merge": {"count": 0, "tables": []},
+        "truncate": {"count": 0, "tables": []},
+        "select_into": {"count": 0, "tables": []},
+    }
+    op_tables = {key: set() for key in operations}
+    notes: list[str] = []
+    errors: list[str] = []
+    unknown_ops: set[str] = set()
+
+    def add_operation(op: str, table: str | None) -> None:
+        operations[op]["count"] += 1
+        if table:
+            op_tables[op].add(table)
+        else:
+            unknown_ops.add(op)
+
+    parse_failed = False
+    try:
+        expressions = parse(sql, read=dialect)
+        for expression in expressions:
+            for node in expression.find_all(exp.Insert):
+                add_operation("insert", _table_name_from_expression(node.this))
+            for node in expression.find_all(exp.Update):
+                if node.find_ancestor(exp.Merge):
+                    continue
+                add_operation("update", _table_name_from_expression(node.this))
+            for node in expression.find_all(exp.Delete):
+                add_operation("delete", _table_name_from_expression(node.this))
+            for node in expression.find_all(exp.Merge):
+                add_operation("merge", _table_name_from_expression(node.this))
+            for node in expression.find_all(exp.Select):
+                into_expr = node.args.get("into")
+                if into_expr is not None:
+                    target = None
+                    if hasattr(into_expr, "this"):
+                        target = _table_name_from_expression(into_expr.this)
+                    if target is None:
+                        target = _table_name_from_expression(into_expr)
+                    add_operation("select_into", target)
+    except Exception as exc:  # pragma: no cover - parse failure fallback
+        errors.append(f"parse_error: {exc}")
+        parse_failed = True
+
+    fallback_ops = _fallback_data_changes(sql)
+    for op, payload in fallback_ops["operations"].items():
+        if parse_failed or operations[op]["count"] == 0:
+            operations[op]["count"] = payload["count"]
+            op_tables[op] = set(payload["tables"])
+            if payload["unknown"]:
+                unknown_ops.add(op)
+
+    for op, tables in op_tables.items():
+        operations[op]["tables"] = sorted(tables)
+        if operations[op]["count"] > 0 and not tables and op in unknown_ops:
+            notes.append(f"{op.upper()} detected but target table uncertain.")
+
+    table_operations_map: dict[str, set[str]] = {}
+    for op, tables in op_tables.items():
+        for table in tables:
+            table_operations_map.setdefault(table, set()).add(op)
+
+    table_operations = [
+        {"table": table, "ops": sorted(ops)} for table, ops in sorted(table_operations_map.items())
+    ]
+
+    signals = _data_change_signals(operations, sql)
+    has_writes = any(
+        operations[key]["count"] > 0
+        for key in ["insert", "update", "delete", "merge", "truncate", "select_into"]
+    )
+
+    return {
+        "data_changes": {
+            "has_writes": has_writes,
+            "operations": operations,
+            "table_operations": table_operations,
+            "signals": signals,
+            "notes": notes,
+        },
+        "errors": errors,
+    }
+
+
 def _fallback_references(sql: str) -> dict[str, list[str]]:
     tables = [match.group(1) for match in TABLE_PATTERN.finditer(sql)]
     functions = []
@@ -566,6 +678,140 @@ def _function_name(node: exp.Expression) -> str | None:
 def _sorted_unique(values: Iterable[str]) -> list[str]:
     normalized = {value.upper() for value in values if value}
     return sorted(normalized)
+
+
+def _strip_sql_comments(sql: str) -> str:
+    no_block = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL)
+    return re.sub(r"--[^\n]*", " ", no_block)
+
+
+def _normalize_identifier(identifier: str) -> str | None:
+    cleaned = identifier.strip()
+    if not cleaned:
+        return None
+    if cleaned.startswith("[") and cleaned.endswith("]"):
+        cleaned = cleaned[1:-1]
+    if cleaned.startswith('"') and cleaned.endswith('"'):
+        cleaned = cleaned[1:-1]
+    return cleaned or None
+
+
+def _normalize_table_name(raw: str) -> str | None:
+    if not raw:
+        return None
+    raw = raw.strip().strip(";")
+    raw = raw.strip("()")
+    parts = []
+    for part in re.split(r"\s*\.\s*", raw):
+        normalized = _normalize_identifier(part)
+        if normalized:
+            parts.append(normalized)
+    if not parts:
+        return None
+    return ".".join(parts).upper()
+
+
+def _table_name_from_expression(node: exp.Expression | None) -> str | None:
+    if node is None:
+        return None
+    if isinstance(node, exp.Table):
+        parts = [part for part in (node.catalog, node.db, node.name) if part]
+        if parts:
+            return _normalize_table_name(".".join(parts))
+    if isinstance(node, exp.Identifier):
+        return _normalize_table_name(node.name or "")
+    if isinstance(node, exp.Expression) and hasattr(node, "name"):
+        name = getattr(node, "name", None)
+        if isinstance(name, str):
+            return _normalize_table_name(name)
+    if hasattr(node, "this") and isinstance(node.this, str):
+        return _normalize_table_name(node.this)
+    return None
+
+
+def _fallback_data_changes(sql: str) -> dict[str, object]:
+    stripped = _strip_sql_comments(sql)
+    operations = {
+        "insert": {"count": 0, "tables": [], "unknown": False},
+        "update": {"count": 0, "tables": [], "unknown": False},
+        "delete": {"count": 0, "tables": [], "unknown": False},
+        "merge": {"count": 0, "tables": [], "unknown": False},
+        "truncate": {"count": 0, "tables": [], "unknown": False},
+        "select_into": {"count": 0, "tables": [], "unknown": False},
+    }
+
+    def add_match(op: str, table: str | None) -> None:
+        operations[op]["count"] += 1
+        if table:
+            operations[op]["tables"].append(table)
+        else:
+            operations[op]["unknown"] = True
+
+    def is_merge_context(start: int) -> bool:
+        statement_start = stripped.rfind(";", 0, start)
+        if statement_start == -1:
+            statement_start = 0
+        context = stripped[statement_start:start]
+        return bool(MERGE_PATTERN.search(context))
+
+    for match in INSERT_PATTERN.finditer(stripped):
+        add_match("insert", _normalize_table_name(match.group("table")))
+    for match in UPDATE_PATTERN.finditer(stripped):
+        if is_merge_context(match.start()):
+            continue
+        add_match("update", _normalize_table_name(match.group("table")))
+    for match in DELETE_PATTERN.finditer(stripped):
+        if is_merge_context(match.start()):
+            continue
+        add_match("delete", _normalize_table_name(match.group("table")))
+    for match in DELETE_ALIAS_PATTERN.finditer(stripped):
+        if is_merge_context(match.start()):
+            continue
+        add_match("delete", _normalize_table_name(match.group("table")))
+    for match in MERGE_PATTERN_REGEX.finditer(stripped):
+        add_match("merge", _normalize_table_name(match.group("table")))
+    for match in TRUNCATE_PATTERN.finditer(stripped):
+        add_match("truncate", _normalize_table_name(match.group("table")))
+    for match in SELECT_INTO_PATTERN.finditer(stripped):
+        add_match("select_into", _normalize_table_name(match.group("table")))
+
+    for op in operations.values():
+        op["tables"] = _sorted_unique(op["tables"])
+    return {"operations": operations}
+
+
+def _data_change_signals(operations: dict[str, dict[str, object]], sql: str) -> list[str]:
+    signals: list[str] = []
+    seen: set[str] = set()
+
+    def add_signal(signal: str) -> None:
+        if signal in seen or len(seen) >= 15:
+            return
+        seen.add(signal)
+        signals.append(signal)
+
+    if operations["insert"]["count"]:
+        add_signal("INSERT")
+    if operations["update"]["count"]:
+        add_signal("UPDATE")
+    if operations["delete"]["count"]:
+        add_signal("DELETE")
+    if operations["merge"]["count"]:
+        add_signal("MERGE")
+    if operations["truncate"]["count"]:
+        add_signal("TRUNCATE")
+    if operations["select_into"]["count"]:
+        add_signal("SELECT INTO")
+
+    stripped = _strip_sql_comments(sql)
+    if OUTPUT_PATTERN.search(stripped):
+        add_signal("OUTPUT")
+    if INSERTED_PATTERN.search(stripped):
+        add_signal("INSERTED")
+    if DELETED_PATTERN.search(stripped):
+        add_signal("DELETED")
+
+    return signals
 
 
 def _scan_control_flow_tokens(sql: str) -> list[str]:
