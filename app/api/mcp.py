@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from app.services.tsql_analyzer import (
     analyze_control_flow,
+    analyze_data_changes,
     analyze_migration_impacts,
     analyze_references,
     analyze_transactions,
@@ -86,12 +87,40 @@ class ControlFlow(BaseModel):
     signals: list[str]
 
 
+class DataChangeOperation(BaseModel):
+    count: int
+    tables: list[str]
+
+
+class DataChangeOperations(BaseModel):
+    insert: DataChangeOperation
+    update: DataChangeOperation
+    delete: DataChangeOperation
+    merge: DataChangeOperation
+    truncate: DataChangeOperation
+    select_into: DataChangeOperation
+
+
+class TableOperation(BaseModel):
+    table: str
+    ops: list[str]
+
+
+class DataChanges(BaseModel):
+    has_writes: bool
+    operations: DataChangeOperations
+    table_operations: list[TableOperation]
+    signals: list[str]
+    notes: list[str]
+
+
 class AnalyzeResponse(BaseModel):
     version: str
     references: References
     transactions: TransactionSummary
     migration_impacts: MigrationImpacts
     control_flow: ControlFlow
+    data_changes: DataChanges
     errors: list[str]
 
 
@@ -101,12 +130,14 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     transactions = analyze_transactions(request.sql)
     impacts = analyze_migration_impacts(request.sql)
     control_flow = analyze_control_flow(request.sql, request.dialect)
-    errors = result["errors"] + control_flow["errors"]
+    data_changes = analyze_data_changes(request.sql, request.dialect)
+    errors = result["errors"] + control_flow["errors"] + data_changes["errors"]
     return AnalyzeResponse(
-        version="0.4",
+        version="0.5",
         references=References(**result["references"]),
         transactions=TransactionSummary(**transactions),
         migration_impacts=MigrationImpacts(**impacts),
         control_flow=ControlFlow(**control_flow["control_flow"]),
+        data_changes=DataChanges(**data_changes["data_changes"]),
         errors=errors,
     )
