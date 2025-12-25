@@ -1,13 +1,6 @@
-from app.main import app
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-app = FastAPI()
-
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+from app.main import app
 
 
 def test_health_returns_ok() -> None:
