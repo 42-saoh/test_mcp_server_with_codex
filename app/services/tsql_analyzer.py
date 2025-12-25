@@ -49,6 +49,47 @@ XACT_STATE_PATTERN = re.compile(r"\bXACT_STATE\s*\(\s*\)", re.IGNORECASE)
 THROW_PATTERN = re.compile(r"\bTHROW\b", re.IGNORECASE)
 RAISERROR_PATTERN = re.compile(r"\bRAISERROR\b", re.IGNORECASE)
 
+DYNAMIC_SQL_EXEC_PATTERN = re.compile(r"\bEXEC(?:UTE)?\s*\(?\s*@\w+", re.IGNORECASE)
+DYNAMIC_SQL_LITERAL_PATTERN = re.compile(r"\bEXEC(?:UTE)?\s*(?:\(|\s)\s*N?'", re.IGNORECASE)
+DYNAMIC_SQL_CONCAT_PATTERN = re.compile(r"\bEXEC(?:UTE)?\s*\(?\s*@\w+\s*\+", re.IGNORECASE)
+SP_EXECUTESQL_PATTERN = re.compile(r"\bSP_EXECUTESQL\b", re.IGNORECASE)
+
+DECLARE_CURSOR_PATTERN = re.compile(r"\bDECLARE\s+\w+\s+CURSOR\b", re.IGNORECASE)
+OPEN_CURSOR_PATTERN = re.compile(r"\bOPEN\s+\w+\b", re.IGNORECASE)
+FETCH_CURSOR_PATTERN = re.compile(r"\bFETCH\s+\w+", re.IGNORECASE)
+CLOSE_CURSOR_PATTERN = re.compile(r"\bCLOSE\s+\w+\b", re.IGNORECASE)
+DEALLOCATE_CURSOR_PATTERN = re.compile(r"\bDEALLOCATE\s+\w+\b", re.IGNORECASE)
+
+OPENQUERY_PATTERN = re.compile(r"\bOPENQUERY\b", re.IGNORECASE)
+OPENDATASOURCE_PATTERN = re.compile(r"\bOPENDATASOURCE\b", re.IGNORECASE)
+EXEC_AT_PATTERN = re.compile(r"\bEXEC(?:UTE)?\b[^;]*\bAT\b", re.IGNORECASE)
+FOUR_PART_NAME_PATTERN = re.compile(
+    r"\b[A-Za-z_][\w]*\.[A-Za-z_][\w]*\.[A-Za-z_][\w]*\.[A-Za-z_][\w]*\b",
+    re.IGNORECASE,
+)
+
+XP_PROC_PATTERN = re.compile(r"\bxp_\w+\b", re.IGNORECASE)
+SP_OA_PATTERN = re.compile(r"\bsp_OA\w+\b", re.IGNORECASE)
+SP_CONFIGURE_PATTERN = re.compile(r"\bsp_configure\b", re.IGNORECASE)
+
+TEMP_TABLE_PATTERN = re.compile(r"##?[A-Za-z_][\w]*", re.IGNORECASE)
+TEMP_TABLE_CREATE_PATTERN = re.compile(r"\bCREATE\s+TABLE\s+##?[A-Za-z_][\w]*\b", re.IGNORECASE)
+TEMP_TABLE_INSERT_PATTERN = re.compile(r"\bINSERT\s+INTO\s+##?[A-Za-z_][\w]*\b", re.IGNORECASE)
+TEMP_TABLE_DROP_PATTERN = re.compile(r"\bDROP\s+TABLE\s+##?[A-Za-z_][\w]*\b", re.IGNORECASE)
+
+TABLE_VARIABLE_PATTERN = re.compile(r"\bDECLARE\s+@\w+\s+TABLE\b", re.IGNORECASE)
+MERGE_PATTERN = re.compile(r"\bMERGE\b", re.IGNORECASE)
+OUTPUT_CLAUSE_PATTERN = re.compile(r"\bOUTPUT\b\s+(?:INSERTED|DELETED)\b", re.IGNORECASE)
+SCOPE_IDENTITY_PATTERN = re.compile(r"\bSCOPE_IDENTITY\s*\(\s*\)", re.IGNORECASE)
+AT_AT_IDENTITY_PATTERN = re.compile(r"@@IDENTITY\b", re.IGNORECASE)
+IDENT_CURRENT_PATTERN = re.compile(r"\bIDENT_CURRENT\s*\(", re.IGNORECASE)
+
+GETDATE_PATTERN = re.compile(r"\bGETDATE\s*\(\s*\)", re.IGNORECASE)
+SYSDATETIME_PATTERN = re.compile(r"\bSYSDATETIME\s*\(\s*\)", re.IGNORECASE)
+NEWID_PATTERN = re.compile(r"\bNEWID\s*\(\s*\)", re.IGNORECASE)
+RAND_PATTERN = re.compile(r"\bRAND\s*\(\s*\)", re.IGNORECASE)
+AT_AT_ERROR_PATTERN = re.compile(r"@@ERROR\b", re.IGNORECASE)
+
 
 def analyze_references(sql: str, dialect: str = "tsql") -> dict[str, object]:
     sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
@@ -135,6 +176,238 @@ def analyze_transactions(sql: str) -> dict[str, object]:
         "xact_abort": xact_abort,
         "isolation_level": isolation_level,
         "signals": signals,
+    }
+
+
+def analyze_migration_impacts(sql: str) -> dict[str, object]:
+    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
+    logger.info("analyze_migration_impacts: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+
+    normalized = re.sub(r"\s+", " ", sql).strip()
+    items: dict[str, dict[str, object]] = {}
+    signal_sets: dict[str, set[str]] = {}
+
+    def ensure_item(
+        item_id: str,
+        category: str,
+        severity: str,
+        title: str,
+        details: str,
+    ) -> None:
+        if item_id in items:
+            return
+        items[item_id] = {
+            "id": item_id,
+            "category": category,
+            "severity": severity,
+            "title": title,
+            "signals": [],
+            "details": details,
+        }
+        signal_sets[item_id] = set()
+
+    def add_signal(item_id: str, signal: str) -> None:
+        signals = items[item_id]["signals"]
+        signal_set = signal_sets[item_id]
+        if signal in signal_set or len(signal_set) >= 10:
+            return
+        signal_set.add(signal)
+        signals.append(signal)
+
+    def add_item_with_signals(
+        item_id: str,
+        category: str,
+        severity: str,
+        title: str,
+        details: str,
+        signals: list[str],
+    ) -> None:
+        ensure_item(item_id, category, severity, title, details)
+        for signal in signals:
+            add_signal(item_id, signal)
+
+    dynamic_signals: list[str] = []
+    if SP_EXECUTESQL_PATTERN.search(normalized):
+        dynamic_signals.append("sp_executesql")
+    if DYNAMIC_SQL_EXEC_PATTERN.search(normalized):
+        dynamic_signals.append("EXEC(@var)")
+    if DYNAMIC_SQL_LITERAL_PATTERN.search(normalized):
+        dynamic_signals.append("EXEC('...')")
+    if DYNAMIC_SQL_CONCAT_PATTERN.search(normalized):
+        dynamic_signals.append("EXEC + concat")
+    if dynamic_signals:
+        add_item_with_signals(
+            "IMP_DYN_SQL",
+            "dynamic_sql",
+            "high",
+            "Dynamic SQL detected",
+            "Dynamic SQL often requires refactoring to safe parameterization in Java/MyBatis.",
+            dynamic_signals,
+        )
+
+    cursor_signals: list[str] = []
+    if DECLARE_CURSOR_PATTERN.search(normalized):
+        cursor_signals.append("DECLARE CURSOR")
+    if OPEN_CURSOR_PATTERN.search(normalized):
+        cursor_signals.append("OPEN CURSOR")
+    if FETCH_CURSOR_PATTERN.search(normalized):
+        cursor_signals.append("FETCH CURSOR")
+    if CLOSE_CURSOR_PATTERN.search(normalized):
+        cursor_signals.append("CLOSE CURSOR")
+    if DEALLOCATE_CURSOR_PATTERN.search(normalized):
+        cursor_signals.append("DEALLOCATE CURSOR")
+    if cursor_signals:
+        add_item_with_signals(
+            "IMP_CURSOR",
+            "cursor",
+            "high",
+            "Cursor usage detected",
+            "Cursors often require set-based rewrites when moving to Java/MyBatis.",
+            cursor_signals,
+        )
+
+    linked_signals: list[str] = []
+    if OPENQUERY_PATTERN.search(normalized):
+        linked_signals.append("OPENQUERY")
+    if OPENDATASOURCE_PATTERN.search(normalized):
+        linked_signals.append("OPENDATASOURCE")
+    if EXEC_AT_PATTERN.search(normalized):
+        linked_signals.append("EXEC AT")
+    if FOUR_PART_NAME_PATTERN.search(normalized):
+        linked_signals.append("FOUR_PART_NAME")
+    if linked_signals:
+        add_item_with_signals(
+            "IMP_LINKED_SERVER",
+            "linked_server",
+            "high",
+            "Linked server usage detected",
+            "Linked server or remote execution patterns may need redesign in Java/MyBatis.",
+            linked_signals,
+        )
+
+    system_proc_signals: list[str] = []
+    if XP_PROC_PATTERN.search(normalized):
+        system_proc_signals.append("xp_")
+    if SP_OA_PATTERN.search(normalized):
+        system_proc_signals.append("sp_OA*")
+    if SP_CONFIGURE_PATTERN.search(normalized):
+        system_proc_signals.append("sp_configure")
+    if system_proc_signals:
+        add_item_with_signals(
+            "IMP_SYSTEM_PROC",
+            "system_proc",
+            "high",
+            "System procedure usage detected",
+            "System-level procedures may not map directly to Java/MyBatis and require review.",
+            system_proc_signals,
+        )
+
+    temp_table_signals: list[str] = []
+    if TEMP_TABLE_PATTERN.search(normalized):
+        temp_table_signals.append("TEMP_TABLE")
+    if TEMP_TABLE_CREATE_PATTERN.search(normalized):
+        temp_table_signals.append("CREATE TABLE #")
+    if TEMP_TABLE_INSERT_PATTERN.search(normalized):
+        temp_table_signals.append("INSERT INTO #")
+    if TEMP_TABLE_DROP_PATTERN.search(normalized):
+        temp_table_signals.append("DROP TABLE #")
+    if temp_table_signals:
+        add_item_with_signals(
+            "IMP_TEMP_TABLE",
+            "temp_table",
+            "medium",
+            "Temporary table usage detected",
+            "Temporary tables may need alternative structures in Java/MyBatis workflows.",
+            temp_table_signals,
+        )
+
+    if TABLE_VARIABLE_PATTERN.search(normalized):
+        add_item_with_signals(
+            "IMP_TABLE_VARIABLE",
+            "table_variable",
+            "medium",
+            "Table variable usage detected",
+            "Table variables may need to be replaced with typed collections in Java/MyBatis.",
+            ["DECLARE @table"],
+        )
+
+    if MERGE_PATTERN.search(normalized):
+        add_item_with_signals(
+            "IMP_MERGE",
+            "merge",
+            "medium",
+            "MERGE statement detected",
+            "MERGE statements can require careful translation to Java/MyBatis logic.",
+            ["MERGE"],
+        )
+
+    if OUTPUT_CLAUSE_PATTERN.search(normalized):
+        add_item_with_signals(
+            "IMP_OUTPUT_CLAUSE",
+            "output_clause",
+            "medium",
+            "OUTPUT clause detected",
+            "OUTPUT clauses may need manual handling in Java/MyBatis result flows.",
+            ["OUTPUT"],
+        )
+
+    identity_signals: list[str] = []
+    if SCOPE_IDENTITY_PATTERN.search(normalized):
+        identity_signals.append("SCOPE_IDENTITY()")
+    if AT_AT_IDENTITY_PATTERN.search(normalized):
+        identity_signals.append("@@IDENTITY")
+    if IDENT_CURRENT_PATTERN.search(normalized):
+        identity_signals.append("IDENT_CURRENT")
+    if identity_signals:
+        add_item_with_signals(
+            "IMP_IDENTITY",
+            "identity",
+            "medium",
+            "Identity retrieval detected",
+            "Identity retrieval functions may need explicit key handling in Java/MyBatis.",
+            identity_signals,
+        )
+
+    nondeterminism_signals: list[str] = []
+    if GETDATE_PATTERN.search(normalized):
+        nondeterminism_signals.append("GETDATE()")
+    if SYSDATETIME_PATTERN.search(normalized):
+        nondeterminism_signals.append("SYSDATETIME()")
+    if NEWID_PATTERN.search(normalized):
+        nondeterminism_signals.append("NEWID()")
+    if RAND_PATTERN.search(normalized):
+        nondeterminism_signals.append("RAND()")
+    if nondeterminism_signals:
+        add_item_with_signals(
+            "IMP_NONDETERMINISM",
+            "nondeterminism",
+            "low",
+            "Non-deterministic function usage detected",
+            "Non-deterministic functions may impact repeatability in migrations.",
+            nondeterminism_signals,
+        )
+
+    error_signals: list[str] = []
+    if RAISERROR_PATTERN.search(normalized):
+        error_signals.append("RAISERROR")
+    if THROW_PATTERN.search(normalized):
+        error_signals.append("THROW")
+    if AT_AT_ERROR_PATTERN.search(normalized):
+        error_signals.append("@@ERROR")
+    if error_signals:
+        add_item_with_signals(
+            "IMP_ERROR_SIGNALING",
+            "error_signaling",
+            "low",
+            "Error signaling detected",
+            "Error signaling patterns may need aligned exception handling in Java.",
+            error_signals,
+        )
+
+    has_impact = bool(items)
+    return {
+        "has_impact": has_impact,
+        "items": list(items.values()),
     }
 
 
