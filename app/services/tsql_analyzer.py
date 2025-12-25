@@ -90,6 +90,34 @@ NEWID_PATTERN = re.compile(r"\bNEWID\s*\(\s*\)", re.IGNORECASE)
 RAND_PATTERN = re.compile(r"\bRAND\s*\(\s*\)", re.IGNORECASE)
 AT_AT_ERROR_PATTERN = re.compile(r"@@ERROR\b", re.IGNORECASE)
 
+CONTROL_FLOW_TOKEN_PATTERN = re.compile(
+    r"(?P<begin_try>\bBEGIN\s+TRY\b)|"
+    r"(?P<begin_catch>\bBEGIN\s+CATCH\b)|"
+    r"(?P<if>\bIF\b)|"
+    r"(?P<while>\bWHILE\b)|"
+    r"(?P<return>\bRETURN\b)|"
+    r"(?P<goto>\bGOTO\b)",
+    re.IGNORECASE,
+)
+CONTROL_FLOW_LABEL_PATTERN = re.compile(
+    r"^[ \t]*[A-Za-z_][\w]*\s*:\s*(?:--.*)?$",
+    re.IGNORECASE | re.MULTILINE,
+)
+CONTROL_FLOW_NESTING_PATTERN = re.compile(
+    r"(?P<begin_try>\bBEGIN\s+TRY\b)|"
+    r"(?P<begin_catch>\bBEGIN\s+CATCH\b)|"
+    r"(?P<end_try>\bEND\s+TRY\b)|"
+    r"(?P<end_catch>\bEND\s+CATCH\b)|"
+    r"(?P<begin>\bBEGIN\b)|"
+    r"(?P<end>\bEND\b)|"
+    r"(?P<if>\bIF\b)|"
+    r"(?P<while>\bWHILE\b)",
+    re.IGNORECASE,
+)
+
+CONTROL_FLOW_NODE_LIMIT = 200
+CONTROL_FLOW_EDGE_LIMIT = 400
+
 
 def analyze_references(sql: str, dialect: str = "tsql") -> dict[str, object]:
     sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
@@ -411,6 +439,76 @@ def analyze_migration_impacts(sql: str) -> dict[str, object]:
     }
 
 
+def analyze_control_flow(sql: str, dialect: str = "tsql") -> dict[str, object]:
+    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
+    logger.info("analyze_control_flow: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+
+    errors: list[str] = []
+    ast_counts = {"if": 0, "try": 0, "return": 0}
+    try:
+        expressions = parse(sql, read=dialect)
+        ast_counts["if"] = sum(1 for expression in expressions for _ in expression.find_all(exp.If))
+        ast_counts["try"] = sum(
+            1 for expression in expressions for _ in expression.find_all(exp.Try)
+        )
+        ast_counts["return"] = sum(
+            1 for expression in expressions for _ in expression.find_all(exp.Return)
+        )
+    except Exception as exc:  # pragma: no cover - fallback for parse failure
+        errors.append(f"parse_error: {exc}")
+
+    tokens = _scan_control_flow_tokens(sql)
+    label_count = len(CONTROL_FLOW_LABEL_PATTERN.findall(sql))
+
+    counts = {
+        "if": max(ast_counts["if"], sum(1 for token in tokens if token == "if")),
+        "while": sum(1 for token in tokens if token == "while"),
+        "try": max(ast_counts["try"], sum(1 for token in tokens if token == "try")),
+        "catch": sum(1 for token in tokens if token == "catch"),
+        "return": max(ast_counts["return"], sum(1 for token in tokens if token == "return")),
+        "goto": sum(1 for token in tokens if token == "goto"),
+    }
+
+    signals = _control_flow_signals(tokens, label_count)
+    max_nesting_depth = _estimate_nesting_depth(sql)
+
+    has_try_catch = bool(counts["try"] or counts["catch"])
+    branch_count = counts["if"]
+    loop_count = counts["while"]
+    return_count = counts["return"]
+    goto_count = counts["goto"]
+
+    cyclomatic_complexity = (
+        1 + branch_count + loop_count + (1 if has_try_catch else 0) + (1 if goto_count > 0 else 0)
+    )
+
+    graph, graph_errors = _build_control_flow_graph(tokens)
+    errors.extend(graph_errors)
+
+    summary = {
+        "has_branching": branch_count > 0,
+        "has_loops": loop_count > 0,
+        "has_try_catch": has_try_catch,
+        "has_goto": goto_count > 0,
+        "has_return": return_count > 0,
+        "branch_count": branch_count,
+        "loop_count": loop_count,
+        "return_count": return_count,
+        "goto_count": goto_count,
+        "max_nesting_depth": max_nesting_depth,
+        "cyclomatic_complexity": cyclomatic_complexity,
+    }
+
+    return {
+        "control_flow": {
+            "summary": summary,
+            "graph": graph,
+            "signals": signals,
+        },
+        "errors": errors,
+    }
+
+
 def _fallback_references(sql: str) -> dict[str, list[str]]:
     tables = [match.group(1) for match in TABLE_PATTERN.finditer(sql)]
     functions = []
@@ -468,3 +566,130 @@ def _function_name(node: exp.Expression) -> str | None:
 def _sorted_unique(values: Iterable[str]) -> list[str]:
     normalized = {value.upper() for value in values if value}
     return sorted(normalized)
+
+
+def _scan_control_flow_tokens(sql: str) -> list[str]:
+    tokens: list[str] = []
+    for match in CONTROL_FLOW_TOKEN_PATTERN.finditer(sql):
+        kind = match.lastgroup
+        if not kind:
+            continue
+        if kind == "begin_try":
+            tokens.append("try")
+        elif kind == "begin_catch":
+            tokens.append("catch")
+        elif kind == "if":
+            tokens.append("if")
+        elif kind == "while":
+            tokens.append("while")
+        elif kind == "return":
+            tokens.append("return")
+        elif kind == "goto":
+            tokens.append("goto")
+    return tokens
+
+
+def _control_flow_signals(tokens: list[str], label_count: int) -> list[str]:
+    signals: list[str] = []
+    seen: set[str] = set()
+
+    def add_signal(signal: str) -> None:
+        if signal in seen or len(seen) >= 10:
+            return
+        seen.add(signal)
+        signals.append(signal)
+
+    for token in tokens:
+        if token == "if":
+            add_signal("IF")
+        elif token == "while":
+            add_signal("WHILE")
+        elif token in {"try", "catch"}:
+            add_signal("TRY/CATCH")
+        elif token == "return":
+            add_signal("RETURN")
+        elif token == "goto":
+            add_signal("GOTO")
+
+    if label_count:
+        add_signal("LABEL")
+
+    return signals
+
+
+def _estimate_nesting_depth(sql: str) -> int:
+    depth = 0
+    max_depth = 0
+    for match in CONTROL_FLOW_NESTING_PATTERN.finditer(sql):
+        kind = match.lastgroup
+        if kind in {"begin_try", "begin_catch", "begin", "if", "while"}:
+            depth += 1
+            max_depth = max(max_depth, depth)
+        elif kind in {"end_try", "end_catch", "end"}:
+            depth = max(0, depth - 1)
+    return max_depth
+
+
+def _build_control_flow_graph(tokens: list[str]) -> tuple[dict[str, object], list[str]]:
+    errors: list[str] = []
+    nodes: list[dict[str, str]] = [{"id": "n0", "type": "start", "label": "START"}]
+
+    node_types: list[dict[str, str]] = []
+    for token in tokens:
+        if token == "if":
+            node_types.append({"type": "if", "label": "IF"})
+        elif token == "while":
+            node_types.append({"type": "while", "label": "WHILE"})
+        elif token == "try":
+            node_types.append({"type": "try", "label": "TRY"})
+        elif token == "catch":
+            node_types.append({"type": "catch", "label": "CATCH"})
+        elif token == "return":
+            node_types.append({"type": "return", "label": "RETURN"})
+        elif token == "goto":
+            node_types.append({"type": "goto", "label": "GOTO"})
+
+    for index, node in enumerate(node_types, start=1):
+        nodes.append({"id": f"n{index}", **node})
+
+    end_id = f"n{len(nodes)}"
+    nodes.append({"id": end_id, "type": "end", "label": "END"})
+
+    if len(nodes) > CONTROL_FLOW_NODE_LIMIT:
+        errors.append("control_flow_graph_truncated: node_limit_exceeded")
+        nodes = nodes[: CONTROL_FLOW_NODE_LIMIT - 1]
+        end_id = f"n{len(nodes)}"
+        nodes.append({"id": end_id, "type": "end", "label": "END"})
+
+    edges: list[dict[str, str]] = []
+    for index in range(len(nodes) - 1):
+        current = nodes[index]
+        next_node = nodes[index + 1]
+        current_type = current["type"]
+        if current_type == "if":
+            edges.append({"from": current["id"], "to": next_node["id"], "label": "true"})
+            edges.append({"from": current["id"], "to": next_node["id"], "label": "false"})
+        elif current_type == "while":
+            edges.append({"from": current["id"], "to": current["id"], "label": "loop"})
+            edges.append({"from": current["id"], "to": next_node["id"], "label": "exit"})
+        elif current_type == "try":
+            if next_node["type"] == "catch":
+                edges.append({"from": current["id"], "to": next_node["id"], "label": "on_error"})
+                follow = nodes[index + 2] if index + 2 < len(nodes) else None
+                if follow:
+                    edges.append({"from": current["id"], "to": follow["id"], "label": "next"})
+            else:
+                edges.append({"from": current["id"], "to": next_node["id"], "label": "next"})
+        elif current_type == "return":
+            edges.append({"from": current["id"], "to": end_id, "label": "return"})
+        elif current_type == "goto":
+            edges.append({"from": current["id"], "to": end_id, "label": "goto"})
+        else:
+            edges.append({"from": current["id"], "to": next_node["id"], "label": "next"})
+
+    if len(edges) > CONTROL_FLOW_EDGE_LIMIT:
+        errors.append("control_flow_graph_truncated: edge_limit_exceeded")
+        edges = edges[:CONTROL_FLOW_EDGE_LIMIT]
+
+    graph = {"nodes": nodes, "edges": edges}
+    return graph, errors
