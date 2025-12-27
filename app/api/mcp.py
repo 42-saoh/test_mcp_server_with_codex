@@ -11,6 +11,7 @@ from app.services.tsql_analyzer import (
     analyze_references,
     analyze_transactions,
 )
+from app.services.tsql_business_rules import analyze_business_rules
 from app.services.tsql_callers import (
     CallerOptions as ServiceCallerOptions,
 )
@@ -333,6 +334,58 @@ class ReusabilityResponse(BaseModel):
     errors: list[str]
 
 
+class BusinessRulesOptions(BaseModel):
+    dialect: str = "tsql"
+    case_insensitive: bool = True
+    max_rules: int = Field(100, ge=1)
+    max_templates: int = Field(150, ge=1)
+
+
+class BusinessRulesRequest(BaseModel):
+    name: str
+    type: str
+    sql: str
+    options: BusinessRulesOptions = Field(default_factory=BusinessRulesOptions)
+
+
+class BusinessRulesObject(BaseModel):
+    name: str
+    type: str
+
+
+class BusinessRulesSummary(BaseModel):
+    has_rules: bool
+    rule_count: int
+    template_suggestion_count: int
+    truncated: bool
+
+
+class BusinessRule(BaseModel):
+    id: str
+    kind: str
+    confidence: float
+    condition: str
+    action: str
+    signals: list[str]
+
+
+class BusinessRuleTemplateSuggestion(BaseModel):
+    rule_id: str
+    template_id: str
+    confidence: float
+    rationale: str
+
+
+class BusinessRulesResponse(BaseModel):
+    version: str
+    object: BusinessRulesObject
+    summary: BusinessRulesSummary
+    rules: list[BusinessRule]
+    template_suggestions: list[BusinessRuleTemplateSuggestion]
+    signals: list[str]
+    errors: list[str]
+
+
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     result = analyze_references(request.sql, request.dialect)
@@ -396,6 +449,28 @@ def common_reusability(request: ReusabilityRequest) -> ReusabilityResponse:
         signals=ReusabilitySignals(**result["signals"]),
         reasons=[ReusabilityReason(**item) for item in result["reasons"]],
         recommendations=[ReusabilityRecommendation(**item) for item in result["recommendations"]],
+        errors=result["errors"],
+    )
+
+
+@router.post("/common/rules-template", response_model=BusinessRulesResponse)
+def common_rules_template(request: BusinessRulesRequest) -> BusinessRulesResponse:
+    result = analyze_business_rules(
+        request.sql,
+        dialect=request.options.dialect,
+        case_insensitive=request.options.case_insensitive,
+        max_rules=request.options.max_rules,
+        max_templates=request.options.max_templates,
+    )
+    return BusinessRulesResponse(
+        version=result["version"],
+        object=BusinessRulesObject(name=request.name, type=request.type),
+        summary=BusinessRulesSummary(**result["summary"]),
+        rules=[BusinessRule(**item) for item in result["rules"]],
+        template_suggestions=[
+            BusinessRuleTemplateSuggestion(**item) for item in result["template_suggestions"]
+        ],
+        signals=result["signals"],
         errors=result["errors"],
     )
 
