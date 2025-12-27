@@ -21,6 +21,7 @@ from app.services.tsql_callers import (
     find_callers,
 )
 from app.services.tsql_external_deps import analyze_external_dependencies
+from app.services.tsql_reusability import evaluate_reusability
 
 router = APIRouter()
 
@@ -273,6 +274,65 @@ class ExternalDepsResponse(BaseModel):
     errors: list[str]
 
 
+class ReusabilityOptions(BaseModel):
+    max_reason_items: int = Field(20, ge=1)
+
+
+class ReusabilityRequest(BaseModel):
+    name: str
+    type: str
+    sql: str
+    options: ReusabilityOptions = Field(default_factory=ReusabilityOptions)
+
+
+class ReusabilityObject(BaseModel):
+    name: str
+    type: str
+
+
+class ReusabilitySummary(BaseModel):
+    score: int
+    grade: str
+    is_candidate: bool
+    candidate_type: str | None
+
+
+class ReusabilitySignals(BaseModel):
+    read_only: bool
+    has_writes: bool
+    uses_transaction: bool
+    has_dynamic_sql: bool
+    has_cursor: bool
+    uses_temp_objects: bool
+    cyclomatic_complexity: int
+    table_count: int
+    function_call_count: int
+    has_try_catch: bool
+    error_signaling: list[str]
+
+
+class ReusabilityReason(BaseModel):
+    id: str
+    impact: str
+    weight: int
+    message: str
+
+
+class ReusabilityRecommendation(BaseModel):
+    id: str
+    message: str
+
+
+class ReusabilityResponse(BaseModel):
+    version: str
+    object: ReusabilityObject
+    summary: ReusabilitySummary
+    signals: ReusabilitySignals
+    reasons: list[ReusabilityReason]
+    recommendations: list[ReusabilityRecommendation]
+    errors: list[str]
+
+
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     result = analyze_references(request.sql, request.dialect)
@@ -321,6 +381,23 @@ def external_deps(request: ExternalDepsRequest) -> ExternalDepsResponse:
         },
     )
     return ExternalDepsResponse(**result)
+
+
+@router.post("/common/reusability", response_model=ReusabilityResponse)
+def common_reusability(request: ReusabilityRequest) -> ReusabilityResponse:
+    result = evaluate_reusability(
+        request.sql,
+        max_reason_items=request.options.max_reason_items,
+    )
+    return ReusabilityResponse(
+        version=result["version"],
+        object=ReusabilityObject(name=request.name, type=request.type),
+        summary=ReusabilitySummary(**result["summary"]),
+        signals=ReusabilitySignals(**result["signals"]),
+        reasons=[ReusabilityReason(**item) for item in result["reasons"]],
+        recommendations=[ReusabilityRecommendation(**item) for item in result["recommendations"]],
+        errors=result["errors"],
+    )
 
 
 def _infer_target_type(target: str, target_type: str | None) -> str:

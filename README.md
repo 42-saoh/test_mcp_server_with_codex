@@ -35,3 +35,12 @@ VS Code에서 GitHub Copilot과 연동하여 SP/FN 분석 결과, 변환 가이�
 ### 5) RAG 기반 표준화(옵션)
 - 사내 표준 문서/가이드, 변환 규칙, 예제 코드 등을 인덱싱
 - 분석 결과와 함께 근거 문서/권장 패턴을 함께 반환
+
+---
+
+## MCP API
+
+- `POST /mcp/analyze`: SP/FN 분석 결과 반환
+- `POST /mcp/callers`: 호출 관계(콜러) 분석
+- `POST /mcp/external-deps`: 외부 의존성 분석
+- `POST /mcp/common/reusability`: 유틸화 가능성 평가(스코어/사유/권장사항)
