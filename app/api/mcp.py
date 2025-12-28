@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
@@ -31,6 +33,7 @@ from app.services.tsql_callers import (
     find_callers,
 )
 from app.services.tsql_external_deps import analyze_external_dependencies
+from app.services.tsql_mapping_strategy import recommend_mapping_strategy
 from app.services.tsql_reusability import evaluate_reusability
 
 router = APIRouter()
@@ -464,6 +467,118 @@ class CallGraphResponse(BaseModel):
     errors: list[CallGraphError]
 
 
+class MappingStrategyOptions(BaseModel):
+    dialect: str = "tsql"
+    case_insensitive: bool = True
+    target_style: Literal["rewrite", "call_sp_first"] = "rewrite"
+    max_items: int = Field(30, ge=1)
+
+
+class MappingStrategyRequest(BaseModel):
+    name: str
+    type: str
+    sql: str
+    options: MappingStrategyOptions = Field(default_factory=MappingStrategyOptions)
+
+
+class MappingStrategyObject(BaseModel):
+    name: str
+    type: str
+
+
+class MappingStrategySummary(BaseModel):
+    approach: str
+    confidence: float
+    difficulty: str
+    is_recommended: bool
+
+
+class MappingStrategySignals(BaseModel):
+    read_only: bool
+    has_writes: bool
+    writes_kind: list[str]
+    uses_transaction: bool
+    has_dynamic_sql: bool
+    has_cursor: bool
+    uses_temp_objects: bool
+    has_merge: bool
+    has_identity_retrieval: bool
+    has_output_clause: bool
+    cyclomatic_complexity: int
+    table_count: int
+    has_try_catch: bool
+    error_signaling: list[str]
+
+
+class StrategyPattern(BaseModel):
+    id: str
+    message: str
+
+
+class MappingStrategyPlan(BaseModel):
+    migration_path: list[str]
+    recommended_patterns: list[StrategyPattern]
+    anti_patterns: list[StrategyPattern]
+
+
+class MapperMethod(BaseModel):
+    name: str
+    kind: str
+    parameter_style: str
+    return_style: str
+
+
+class XmlTemplate(BaseModel):
+    statement_tag: str
+    skeleton: str
+    dynamic_tags: list[str]
+
+
+class MyBatisMapping(BaseModel):
+    mapper_method: MapperMethod
+    xml_template: XmlTemplate
+
+
+class ServicePattern(BaseModel):
+    transactional: bool
+    exception_mapping: str
+
+
+class DtoSuggestion(BaseModel):
+    id: str
+    fields: list[str]
+    notes: str
+
+
+class JavaMapping(BaseModel):
+    service_pattern: ServicePattern
+    dto_suggestions: list[DtoSuggestion]
+
+
+class MappingStrategyReason(BaseModel):
+    id: str
+    weight: int
+    message: str
+
+
+class MappingStrategyRecommendation(BaseModel):
+    id: str
+    message: str
+
+
+class MappingStrategyResponse(BaseModel):
+    version: str
+    object: MappingStrategyObject
+    summary: MappingStrategySummary
+    signals: MappingStrategySignals
+    strategy: MappingStrategyPlan
+    mybatis: MyBatisMapping
+    java: JavaMapping
+    reasons: list[MappingStrategyReason]
+    recommendations: list[MappingStrategyRecommendation]
+    errors: list[str]
+
+
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     result = analyze_references(request.sql, request.dialect)
@@ -569,6 +684,44 @@ def common_call_graph(request: CallGraphRequest) -> CallGraphResponse:
     )
     result = build_call_graph(service_objects, service_options)
     return CallGraphResponse(**result)
+
+
+@router.post("/migration/mapping-strategy", response_model=MappingStrategyResponse)
+def migration_mapping_strategy(request: MappingStrategyRequest) -> MappingStrategyResponse:
+    result = recommend_mapping_strategy(
+        request.sql,
+        request.type,
+        dialect=request.options.dialect,
+        case_insensitive=request.options.case_insensitive,
+        target_style=request.options.target_style,
+        max_items=request.options.max_items,
+    )
+    return MappingStrategyResponse(
+        version=result["version"],
+        object=MappingStrategyObject(name=request.name, type=request.type),
+        summary=MappingStrategySummary(**result["summary"]),
+        signals=MappingStrategySignals(**result["signals"]),
+        strategy=MappingStrategyPlan(
+            migration_path=result["strategy"]["migration_path"],
+            recommended_patterns=[
+                StrategyPattern(**item) for item in result["strategy"]["recommended_patterns"]
+            ],
+            anti_patterns=[StrategyPattern(**item) for item in result["strategy"]["anti_patterns"]],
+        ),
+        mybatis=MyBatisMapping(
+            mapper_method=MapperMethod(**result["mybatis"]["mapper_method"]),
+            xml_template=XmlTemplate(**result["mybatis"]["xml_template"]),
+        ),
+        java=JavaMapping(
+            service_pattern=ServicePattern(**result["java"]["service_pattern"]),
+            dto_suggestions=[DtoSuggestion(**item) for item in result["java"]["dto_suggestions"]],
+        ),
+        reasons=[MappingStrategyReason(**item) for item in result["reasons"]],
+        recommendations=[
+            MappingStrategyRecommendation(**item) for item in result["recommendations"]
+        ],
+        errors=result["errors"],
+    )
 
 
 def _infer_target_type(target: str, target_type: str | None) -> str:
