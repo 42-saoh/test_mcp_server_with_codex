@@ -32,6 +32,7 @@ from app.services.tsql_callers import (
 from app.services.tsql_callers import (
     find_callers,
 )
+from app.services.tsql_db_dependency import analyze_db_dependency
 from app.services.tsql_external_deps import analyze_external_dependencies
 from app.services.tsql_mapping_strategy import recommend_mapping_strategy
 from app.services.tsql_mybatis_difficulty import evaluate_mybatis_difficulty
@@ -770,6 +771,110 @@ class PerformanceRiskResponse(BaseModel):
     errors: list[str]
 
 
+class DbDependencyOptions(BaseModel):
+    dialect: str = "tsql"
+    case_insensitive: bool = True
+    schema_sensitive: bool = False
+    max_items: int = 200
+
+
+class DbDependencyRequest(BaseModel):
+    name: str
+    type: str
+    sql: str
+    options: DbDependencyOptions = Field(default_factory=DbDependencyOptions)
+
+
+class DbDependencyObject(BaseModel):
+    name: str
+    type: str
+
+
+class DbDependencySummary(BaseModel):
+    dependency_score: int
+    dependency_level: str
+    truncated: bool
+
+
+class DbDependencyMetrics(BaseModel):
+    table_count: int
+    function_call_count: int
+    cross_database_count: int
+    linked_server_count: int
+    remote_exec_count: int
+    openquery_count: int
+    opendatasource_count: int
+    system_proc_count: int
+    xp_cmdshell_count: int
+    clr_signal_count: int
+    tempdb_pressure_signals: int
+
+
+class DbDependencyCrossDatabaseItem(BaseModel):
+    database: str
+    schema_: str = Field(..., alias="schema")
+    object: str
+    kind: str
+    signals: list[str]
+
+
+class DbDependencyLinkedServerItem(BaseModel):
+    name: str
+    signals: list[str]
+
+
+class DbDependencyRemoteExecItem(BaseModel):
+    target: str
+    kind: str
+    signals: list[str]
+
+
+class DbDependencyExternalAccessItem(BaseModel):
+    id: str
+    signals: list[str]
+
+
+class DbDependencySystemObjectItem(BaseModel):
+    id: str
+    signals: list[str]
+
+
+class DbDependencyTempdbSignalItem(BaseModel):
+    id: str
+    signals: list[str]
+
+
+class DbDependencyDependencies(BaseModel):
+    cross_database: list[DbDependencyCrossDatabaseItem]
+    linked_servers: list[DbDependencyLinkedServerItem]
+    remote_exec: list[DbDependencyRemoteExecItem]
+    external_access: list[DbDependencyExternalAccessItem]
+    system_objects: list[DbDependencySystemObjectItem]
+    tempdb_signals: list[DbDependencyTempdbSignalItem]
+
+
+class DbDependencyReason(BaseModel):
+    id: str
+    weight: int
+    message: str
+
+
+class DbDependencyRecommendation(BaseModel):
+    id: str
+    message: str
+
+
+class DbDependencyResponse(BaseModel):
+    version: str
+    object: DbDependencyObject
+    summary: DbDependencySummary
+    metrics: DbDependencyMetrics
+    dependencies: DbDependencyDependencies
+    reasons: list[DbDependencyReason]
+    recommendations: list[DbDependencyRecommendation]
+    errors: list[str]
+
+
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     result = analyze_references(request.sql, request.dialect)
@@ -978,6 +1083,51 @@ def quality_performance_risk(request: PerformanceRiskRequest) -> PerformanceRisk
         recommendations=[
             PerformanceRiskRecommendation(**item) for item in result["recommendations"]
         ],
+        errors=result["errors"],
+    )
+
+
+@router.post("/quality/db-dependency", response_model=DbDependencyResponse)
+def quality_db_dependency(request: DbDependencyRequest) -> DbDependencyResponse:
+    result = analyze_db_dependency(
+        request.sql,
+        dialect=request.options.dialect,
+        case_insensitive=request.options.case_insensitive,
+        schema_sensitive=request.options.schema_sensitive,
+        max_items=request.options.max_items,
+    )
+    return DbDependencyResponse(
+        version=result["version"],
+        object=DbDependencyObject(name=request.name, type=request.type),
+        summary=DbDependencySummary(**result["summary"]),
+        metrics=DbDependencyMetrics(**result["metrics"]),
+        dependencies=DbDependencyDependencies(
+            cross_database=[
+                DbDependencyCrossDatabaseItem(**item)
+                for item in result["dependencies"]["cross_database"]
+            ],
+            linked_servers=[
+                DbDependencyLinkedServerItem(**item)
+                for item in result["dependencies"]["linked_servers"]
+            ],
+            remote_exec=[
+                DbDependencyRemoteExecItem(**item) for item in result["dependencies"]["remote_exec"]
+            ],
+            external_access=[
+                DbDependencyExternalAccessItem(**item)
+                for item in result["dependencies"]["external_access"]
+            ],
+            system_objects=[
+                DbDependencySystemObjectItem(**item)
+                for item in result["dependencies"]["system_objects"]
+            ],
+            tempdb_signals=[
+                DbDependencyTempdbSignalItem(**item)
+                for item in result["dependencies"]["tempdb_signals"]
+            ],
+        ),
+        reasons=[DbDependencyReason(**item) for item in result["reasons"]],
+        recommendations=[DbDependencyRecommendation(**item) for item in result["recommendations"]],
         errors=result["errors"],
     )
 
