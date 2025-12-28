@@ -45,5 +45,5 @@ RUN mkdir -p /data/faiss /app/logs
 EXPOSE 9700
 
 # NOTE:
-# - app/server.py 내부에서 mcp.run(transport="streamable-http", host="0.0.0.0", port=int(os.getenv("MCP_PORT", 9700)), ...) 형태로 실행되도록 맞춰주세요.
-CMD ["python", "-m", "app.server"]
+# - FastAPI entrypoint is app.main:app.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9700"]
