@@ -35,6 +35,7 @@ from app.services.tsql_callers import (
 from app.services.tsql_external_deps import analyze_external_dependencies
 from app.services.tsql_mapping_strategy import recommend_mapping_strategy
 from app.services.tsql_mybatis_difficulty import evaluate_mybatis_difficulty
+from app.services.tsql_performance_risk import analyze_performance_risk
 from app.services.tsql_reusability import evaluate_reusability
 from app.services.tsql_tx_boundary import recommend_transaction_boundary
 
@@ -712,6 +713,63 @@ class MyBatisDifficultyResponse(BaseModel):
     errors: list[str]
 
 
+class PerformanceRiskOptions(BaseModel):
+    dialect: str = "tsql"
+    case_insensitive: bool = True
+    max_findings: int = 50
+
+
+class PerformanceRiskRequest(BaseModel):
+    name: str
+    type: str
+    sql: str
+    options: PerformanceRiskOptions = Field(default_factory=PerformanceRiskOptions)
+
+
+class PerformanceRiskObject(BaseModel):
+    name: str
+    type: str
+
+
+class PerformanceRiskSummary(BaseModel):
+    risk_score: int
+    risk_level: str
+    finding_count: int
+    truncated: bool
+
+
+class PerformanceRiskSignals(BaseModel):
+    table_count: int
+    has_writes: bool
+    uses_transaction: bool
+    cyclomatic_complexity: int
+    has_cursor: bool
+    has_dynamic_sql: bool
+
+
+class PerformanceRiskFinding(BaseModel):
+    id: str
+    severity: str
+    title: str
+    markers: list[str]
+    recommendation: str
+
+
+class PerformanceRiskRecommendation(BaseModel):
+    id: str
+    message: str
+
+
+class PerformanceRiskResponse(BaseModel):
+    version: str
+    object: PerformanceRiskObject
+    summary: PerformanceRiskSummary
+    signals: PerformanceRiskSignals
+    findings: list[PerformanceRiskFinding]
+    recommendations: list[PerformanceRiskRecommendation]
+    errors: list[str]
+
+
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     result = analyze_references(request.sql, request.dialect)
@@ -899,6 +957,27 @@ def migration_transaction_boundary(request: TxBoundaryRequest) -> TxBoundaryResp
         suggestions=[TxBoundaryItem(**item) for item in result["suggestions"]],
         anti_patterns=[TxBoundaryItem(**item) for item in result["anti_patterns"]],
         java_snippets=TxBoundarySnippets(**result["java_snippets"]),
+        errors=result["errors"],
+    )
+
+
+@router.post("/quality/performance-risk", response_model=PerformanceRiskResponse)
+def quality_performance_risk(request: PerformanceRiskRequest) -> PerformanceRiskResponse:
+    result = analyze_performance_risk(
+        request.sql,
+        dialect=request.options.dialect,
+        case_insensitive=request.options.case_insensitive,
+        max_findings=request.options.max_findings,
+    )
+    return PerformanceRiskResponse(
+        version=result["version"],
+        object=PerformanceRiskObject(name=request.name, type=request.type),
+        summary=PerformanceRiskSummary(**result["summary"]),
+        signals=PerformanceRiskSignals(**result["signals"]),
+        findings=[PerformanceRiskFinding(**item) for item in result["findings"]],
+        recommendations=[
+            PerformanceRiskRecommendation(**item) for item in result["recommendations"]
+        ],
         errors=result["errors"],
     )
 
