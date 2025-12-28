@@ -84,6 +84,23 @@ def _jsonrpc_response(
     return JSONResponse(status_code=status.HTTP_200_OK, content=payload)
 
 
+def _jsonrpc_error_response(
+    request_id: Any | None,
+    *,
+    code: int,
+    message: str,
+    http_status: int = status.HTTP_400_BAD_REQUEST,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=http_status,
+        content={
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {"code": code, "message": message},
+        },
+    )
+
+
 # [함수 설명]
 # - 목적: MCP initialize 응답을 생성한다.
 # - 입력: params 딕셔너리
@@ -263,24 +280,39 @@ async def mcp_post(request: Request) -> Response:
 
     try:
         payload = await request.json()
-    except Exception as exc:  # noqa: BLE001 - request validation
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid JSON payload",
-        ) from exc
+    except Exception:  # noqa: BLE001 - request validation
+        return _jsonrpc_error_response(
+            None,
+            code=-32700,
+            message="Parse error",
+        )
 
     if not isinstance(payload, dict):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid JSON-RPC payload",
+        return _jsonrpc_error_response(
+            None,
+            code=-32600,
+            message="Invalid Request",
+        )
+
+    if payload.get("jsonrpc") != "2.0":
+        return _jsonrpc_error_response(
+            payload.get("id"),
+            code=-32600,
+            message="Invalid Request",
         )
 
     method = payload.get("method")
+    if not method:
+        return _jsonrpc_error_response(
+            payload.get("id"),
+            code=-32600,
+            message="Invalid Request",
+        )
     if method == "notifications/initialized":
         return Response(status_code=status.HTTP_202_ACCEPTED)
 
     request_id = payload.get("id")
-    if method is None or request_id is None:
+    if request_id is None:
         return Response(status_code=status.HTTP_202_ACCEPTED)
 
     params = payload.get("params") or {}

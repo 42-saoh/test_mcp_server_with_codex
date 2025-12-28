@@ -179,3 +179,33 @@ def test_mcp_invalid_protocol_version_returns_400() -> None:
     )
 
     assert response.status_code == 400
+
+
+# [함수 설명]
+# - 목적: MCP analyze_sql 도구 응답에 원문 SQL이 포함되지 않는지 확인한다.
+# - 입력: JSON-RPC tools/call 메시지(센티널 SQL 포함)
+# - 출력: 응답 본문에 센티널 문자열이 없는지 검증한다.
+# - 에러 처리: 실패 시 pytest assertion으로 보고한다.
+# - 결정론: 동일 입력에 대해 동일 결과를 검증한다.
+# - 보안: 원문 SQL/비밀 값은 응답에 노출하지 않는다.
+def test_mcp_tools_call_does_not_echo_sql() -> None:
+    client = TestClient(app)
+
+    sentinel = "__SQL_SENTINEL__FROM_DBO__"
+    payload = {
+        "jsonrpc": "2.0",
+        "id": "call-3",
+        "method": "tools/call",
+        "params": {
+            "name": "analyze_sql",
+            "arguments": {"sql": f"SELECT * FROM dbo.Users WHERE note = '{sentinel}';"},
+        },
+    }
+    response = client.post(
+        "/mcp",
+        json=payload,
+        headers={"MCP-Protocol-Version": "2025-11-25"},
+    )
+
+    assert response.status_code == 200
+    assert sentinel not in response.text
