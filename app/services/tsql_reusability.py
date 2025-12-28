@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from dataclasses import dataclass
 
+from app.services.safe_sql import summarize_sql
 from app.services.tsql_analyzer import (
     analyze_control_flow,
     analyze_data_changes,
@@ -36,8 +36,12 @@ def evaluate_reusability(sql: str, dialect: str = "tsql", max_reason_items: int 
 
     Scoring model (deterministic): start at 100, subtract penalties, apply bonus, clamp 0..100.
     """
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
-    logger.info("evaluate_reusability: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+    summary = summarize_sql(sql)
+    logger.info(
+        "evaluate_reusability: sql_len=%s sql_hash=%s",
+        summary["len"],
+        summary["sha256_8"],
+    )
 
     references = analyze_references(sql, dialect)
     transactions = analyze_transactions(sql)

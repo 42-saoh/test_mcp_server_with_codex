@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from typing import Any
+
+from app.services.safe_sql import summarize_sql
 
 logger = logging.getLogger(__name__)
 
@@ -125,8 +126,12 @@ def analyze_performance_risk(
     case_insensitive: bool = True,
     max_findings: int = 50,
 ) -> dict[str, Any]:
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
-    logger.info("analyze_performance_risk: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+    summary = summarize_sql(sql)
+    logger.info(
+        "analyze_performance_risk: sql_len=%s sql_hash=%s",
+        summary["len"],
+        summary["sha256_8"],
+    )
 
     stripped_sql = _strip_comments(sql)
     wildcard_like = _detect_leading_wildcard_like(stripped_sql)

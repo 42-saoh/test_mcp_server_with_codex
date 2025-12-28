@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from dataclasses import dataclass
+
+from app.services.safe_sql import summarize_sql
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +49,11 @@ def analyze_business_rules(
     max_rules: int = 100,
     max_templates: int = 150,
 ) -> dict:
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
+    summary = summarize_sql(sql)
     logger.info(
         "analyze_business_rules: sql_len=%s sql_hash=%s dialect=%s",
-        len(sql),
-        sql_hash,
+        summary["len"],
+        summary["sha256_8"],
         dialect,
     )
 

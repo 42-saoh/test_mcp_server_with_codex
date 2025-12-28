@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import logging
 import re
 from typing import Any
+
+from app.services.safe_sql import summarize_sql
 
 logger = logging.getLogger(__name__)
 
@@ -102,8 +103,12 @@ def analyze_db_dependency(
     schema_sensitive: bool = False,
     max_items: int = 200,
 ) -> dict[str, Any]:
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
-    logger.info("analyze_db_dependency: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+    summary = summarize_sql(sql)
+    logger.info(
+        "analyze_db_dependency: sql_len=%s sql_hash=%s",
+        summary["len"],
+        summary["sha256_8"],
+    )
 
     stripped_sql = _strip_comments(sql)
     masked_sql = _mask_string_literals(stripped_sql)
