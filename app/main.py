@@ -4,7 +4,7 @@
 # - 입력/출력: HTTP 요청에 대해 상태 정보를 반환한다.
 # - 주의 사항: 동작 변경 없이 라우팅만 담당한다.
 # - 연관 모듈: app.api.mcp 라우터와 연동된다.
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 
 from app.api.mcp import router as mcp_router
 from app.mcp_streamable_http import mcp_get, mcp_post
@@ -23,7 +23,13 @@ app = FastAPI()
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
-
 app.include_router(mcp_router, prefix="/mcp")
-app.add_api_route("/mcp", mcp_post, methods=["POST"])
-app.add_api_route("/mcp", mcp_get, methods=["GET"])
+
+@app.post("/mcp")
+async def mcp_post_route(request: Request) -> Response:
+    return await mcp_post(request)
+
+
+@app.get("/mcp")
+def mcp_get_route() -> Response:
+    return mcp_get()
