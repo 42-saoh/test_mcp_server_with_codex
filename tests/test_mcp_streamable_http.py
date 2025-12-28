@@ -4,9 +4,12 @@
 # - 입력/출력: JSON-RPC 메시지를 사용한다.
 # - 주의 사항: 원문 SQL/비밀 값은 로그에 포함하지 않는다.
 # - 연관 모듈: app.main 및 app.mcp_streamable_http와 연동된다.
+import re
+
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.mcp_streamable_http import ALIASES, normalize_tool_name
 
 
 # [함수 설명]
@@ -83,7 +86,10 @@ def test_mcp_tools_list_returns_tools() -> None:
     assert isinstance(tools, list)
     tool_names = {tool["name"] for tool in tools}
     assert "analyze_sql" in tool_names
+    assert "tsql_analyze" in tool_names
     assert "health" in tool_names
+    assert "tsql.analyze" not in tool_names
+    assert all(re.fullmatch(r"[a-z0-9_-]+", name) for name in tool_names)
 
 
 # [함수 설명]
@@ -116,6 +122,61 @@ def test_mcp_tools_call_returns_result() -> None:
     result = body["result"]
     assert result["content"]
     assert "structuredContent" in result
+
+
+def test_mcp_tools_call_accepts_tsql_analyze() -> None:
+    client = TestClient(app)
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": "call-1a",
+        "method": "tools/call",
+        "params": {
+            "name": "tsql_analyze",
+            "arguments": {"sql": "SELECT 1", "dialect": "tsql"},
+        },
+    }
+    response = client.post(
+        "/mcp",
+        json=payload,
+        headers={"MCP-Protocol-Version": "2025-11-25"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    result = body["result"]
+    assert result["content"]
+    assert "structuredContent" in result
+
+
+def test_mcp_tools_call_accepts_tsql_analyze_alias() -> None:
+    client = TestClient(app)
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": "call-1b",
+        "method": "tools/call",
+        "params": {
+            "name": "tsql.analyze",
+            "arguments": {"sql": "SELECT 1", "dialect": "tsql"},
+        },
+    }
+    response = client.post(
+        "/mcp",
+        json=payload,
+        headers={"MCP-Protocol-Version": "2025-11-25"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    result = body["result"]
+    assert result["content"]
+    assert "structuredContent" in result
+
+
+def test_normalize_tool_name_uses_aliases() -> None:
+    assert normalize_tool_name("TSQL.ANALYZE") == "tsql_analyze"
+    assert ALIASES["tsql.analyze"] == "tsql_analyze"
 
 
 # [함수 설명]

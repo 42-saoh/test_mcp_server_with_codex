@@ -19,7 +19,20 @@ router = APIRouter()
 DEFAULT_SUPPORTED_PROTOCOL_VERSIONS = ("2025-03-26", "2025-11-25")
 TOOL_ANALYZE_SQL = "analyze_sql"
 TOOL_HEALTH = "health"
-TOOL_TSQL_ANALYZE = "tsql.analyze"
+TOOL_TSQL_ANALYZE = "tsql_analyze"
+
+ALIASES = {"tsql.analyze": TOOL_TSQL_ANALYZE}
+
+
+def normalize_tool_name(name: str) -> str:
+    return name.strip().lower().replace(".", "_").replace(" ", "_")
+
+
+def resolve_tool_name(name: str) -> str:
+    if name in ALIASES:
+        return ALIASES[name]
+    normalized = normalize_tool_name(name)
+    return ALIASES.get(normalized, normalized)
 
 
 # [함수 설명]
@@ -171,9 +184,7 @@ def _tool_registry() -> list[dict[str, Any]]:
         },
         {
             "name": TOOL_TSQL_ANALYZE,
-            "description": (
-                "Legacy alias for analyze_sql (kept for compatibility with existing clients)."
-            ),
+            "description": ("Analyze a T-SQL statement (alias for analyze_sql compatibility)."),
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -240,10 +251,11 @@ def _handle_tools_call(params: dict[str, Any]) -> dict[str, Any]:
     arguments = params.get("arguments")
     if not name:
         return _build_tool_result("Tool name is required.", None, is_error=True)
-    if name == TOOL_HEALTH:
+    resolved_name = resolve_tool_name(name)
+    if resolved_name == TOOL_HEALTH:
         summary = "Service health check completed."
         return _build_tool_result(summary, {"status": "ok"}, is_error=False)
-    if name in {TOOL_ANALYZE_SQL, TOOL_TSQL_ANALYZE}:
+    if resolved_name in {TOOL_ANALYZE_SQL, TOOL_TSQL_ANALYZE}:
         if not isinstance(arguments, dict):
             return _build_tool_result("Tool arguments must be an object.", None, is_error=True)
         try:
@@ -261,7 +273,7 @@ def _handle_tools_call(params: dict[str, Any]) -> dict[str, Any]:
             return _build_tool_result(summary, payload, is_error=False)
         except Exception as exc:  # noqa: BLE001 - tool errors returned via isError
             return _build_tool_result(f"Tool execution failed: {exc}.", None, is_error=True)
-    return _build_tool_result(f"Unknown tool: {name}.", None, is_error=True)
+    return _build_tool_result(f"Unknown tool: {resolved_name}.", None, is_error=True)
 
 
 # [함수 설명]
