@@ -23,9 +23,7 @@ app = FastAPI()
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
-
 app.include_router(mcp_router, prefix="/mcp")
-
 
 @app.post("/mcp")
 async def mcp_post_route(request: Request) -> Response:
