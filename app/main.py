@@ -7,7 +7,7 @@
 from fastapi import FastAPI
 
 from app.api.mcp import router as mcp_router
-from app.mcp_streamable_http import router as mcp_http_router
+from app.mcp_streamable_http import mcp_get, mcp_post
 
 app = FastAPI()
 
@@ -25,4 +25,5 @@ def health() -> dict[str, str]:
 
 
 app.include_router(mcp_router, prefix="/mcp")
-app.include_router(mcp_http_router)
+app.add_api_route("/mcp", mcp_post, methods=["POST"])
+app.add_api_route("/mcp", mcp_get, methods=["GET"])
