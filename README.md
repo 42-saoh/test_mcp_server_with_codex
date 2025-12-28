@@ -79,3 +79,6 @@ curl -X POST http://localhost:9700/mcp/migration/mapping-strategy \
   -H "Content-Type: application/json" \
   -d '{"name":"dbo.usp_Name","type":"procedure","sql":"<SQL_PLACEHOLDER>","options":{"target_style":"rewrite"}}'
 ```
+
+---
+
