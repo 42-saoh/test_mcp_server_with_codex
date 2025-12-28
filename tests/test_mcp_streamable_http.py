@@ -81,7 +81,9 @@ def test_mcp_tools_list_returns_tools() -> None:
     body = response.json()
     tools = body["result"]["tools"]
     assert isinstance(tools, list)
-    assert len(tools) >= 1
+    tool_names = {tool["name"] for tool in tools}
+    assert "analyze_sql" in tool_names
+    assert "health" in tool_names
 
 
 # [함수 설명]
@@ -99,7 +101,7 @@ def test_mcp_tools_call_returns_result() -> None:
         "id": "call-1",
         "method": "tools/call",
         "params": {
-            "name": "tsql.analyze",
+            "name": "analyze_sql",
             "arguments": {"sql": "SELECT 1", "dialect": "tsql"},
         },
     }
@@ -114,6 +116,34 @@ def test_mcp_tools_call_returns_result() -> None:
     result = body["result"]
     assert result["content"]
     assert "structuredContent" in result
+
+
+# [함수 설명]
+# - 목적: health tool 호출이 정상 결과를 반환하는지 확인한다.
+# - 입력: JSON-RPC tools/call 메시지
+# - 출력: status=ok 확인
+# - 에러 처리: 실패 시 pytest assertion으로 보고한다.
+# - 결정론: 동일 입력에 대해 동일 결과를 검증한다.
+# - 보안: 민감 정보는 포함하지 않는다.
+def test_mcp_tools_call_health_returns_ok() -> None:
+    client = TestClient(app)
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": "call-2",
+        "method": "tools/call",
+        "params": {"name": "health", "arguments": {}},
+    }
+    response = client.post(
+        "/mcp",
+        json=payload,
+        headers={"MCP-Protocol-Version": "2025-11-25"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    result = body["result"]
+    assert result["structuredContent"]["status"] == "ok"
 
 
 # [함수 설명]
