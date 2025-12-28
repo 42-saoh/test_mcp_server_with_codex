@@ -34,6 +34,7 @@ from app.services.tsql_callers import (
 )
 from app.services.tsql_external_deps import analyze_external_dependencies
 from app.services.tsql_mapping_strategy import recommend_mapping_strategy
+from app.services.tsql_mybatis_difficulty import evaluate_mybatis_difficulty
 from app.services.tsql_reusability import evaluate_reusability
 from app.services.tsql_tx_boundary import recommend_transaction_boundary
 
@@ -646,6 +647,71 @@ class TxBoundaryResponse(BaseModel):
     errors: list[str]
 
 
+class MyBatisDifficultyOptions(BaseModel):
+    dialect: str = "tsql"
+    case_insensitive: bool = True
+    max_reason_items: int = 25
+
+
+class MyBatisDifficultyRequest(BaseModel):
+    name: str
+    type: str
+    sql: str
+    options: MyBatisDifficultyOptions = Field(default_factory=MyBatisDifficultyOptions)
+
+
+class MyBatisDifficultyObject(BaseModel):
+    name: str
+    type: str
+
+
+class MyBatisDifficultySummary(BaseModel):
+    difficulty_score: int
+    difficulty_level: str
+    estimated_work_units: int
+    is_rewrite_recommended: bool
+    confidence: float
+    truncated: bool
+
+
+class MyBatisDifficultySignals(BaseModel):
+    table_count: int
+    function_call_count: int
+    has_writes: bool
+    write_ops: list[str]
+    uses_transaction: bool
+    has_dynamic_sql: bool
+    has_cursor: bool
+    uses_temp_objects: bool
+    has_merge: bool
+    has_output_clause: bool
+    has_identity_retrieval: bool
+    has_try_catch: bool
+    error_signaling: list[str]
+    cyclomatic_complexity: int
+
+
+class MyBatisDifficultyFactor(BaseModel):
+    id: str
+    points: int
+    message: str
+
+
+class MyBatisDifficultyRecommendation(BaseModel):
+    id: str
+    message: str
+
+
+class MyBatisDifficultyResponse(BaseModel):
+    version: str
+    object: MyBatisDifficultyObject
+    summary: MyBatisDifficultySummary
+    signals: MyBatisDifficultySignals
+    factors: list[MyBatisDifficultyFactor]
+    recommendations: list[MyBatisDifficultyRecommendation]
+    errors: list[str]
+
+
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     result = analyze_references(request.sql, request.dialect)
@@ -786,6 +852,30 @@ def migration_mapping_strategy(request: MappingStrategyRequest) -> MappingStrate
         reasons=[MappingStrategyReason(**item) for item in result["reasons"]],
         recommendations=[
             MappingStrategyRecommendation(**item) for item in result["recommendations"]
+        ],
+        errors=result["errors"],
+    )
+
+
+@router.post("/migration/mybatis-difficulty", response_model=MyBatisDifficultyResponse)
+def migration_mybatis_difficulty(
+    request: MyBatisDifficultyRequest,
+) -> MyBatisDifficultyResponse:
+    result = evaluate_mybatis_difficulty(
+        request.sql,
+        request.type,
+        dialect=request.options.dialect,
+        case_insensitive=request.options.case_insensitive,
+        max_reason_items=request.options.max_reason_items,
+    )
+    return MyBatisDifficultyResponse(
+        version=result["version"],
+        object=MyBatisDifficultyObject(name=request.name, type=request.type),
+        summary=MyBatisDifficultySummary(**result["summary"]),
+        signals=MyBatisDifficultySignals(**result["signals"]),
+        factors=[MyBatisDifficultyFactor(**item) for item in result["factors"]],
+        recommendations=[
+            MyBatisDifficultyRecommendation(**item) for item in result["recommendations"]
         ],
         errors=result["errors"],
     )
