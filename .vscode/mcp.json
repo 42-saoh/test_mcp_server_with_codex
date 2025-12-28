@@ -11,9 +11,10 @@
 //     }
 //   }
 // }
+
 {
   "servers": {
-    "mssql-migration-mcp": {
+    "mssql-migration": {
       "type": "http",
       "url": "http://localhost:9700/mcp"
     }
