@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from dataclasses import dataclass
+
+from app.services.safe_sql import strip_comments_and_strings, summarize_sql
 
 logger = logging.getLogger(__name__)
 
 MAX_OBJECTS = 500
 MAX_TOTAL_SQL_LENGTH = 1_000_000
 SIGNAL_LIMIT = 10
-
-BLOCK_COMMENT_PATTERN = re.compile(r"/\*.*?\*/", re.DOTALL)
-LINE_COMMENT_PATTERN = re.compile(r"--.*?$", re.MULTILINE)
-STRING_LITERAL_PATTERN = re.compile(r"N'(?:''|[^'])*'|'(?:''|[^'])*'", re.DOTALL)
 
 IDENTIFIER_PATTERN = r"(?:\[[^\]]+\]|[A-Za-z_][\w$#]*)"
 QUALIFIED_NAME_PATTERN = rf"{IDENTIFIER_PATTERN}(?:\s*\.\s*{IDENTIFIER_PATTERN})*"
@@ -62,13 +59,13 @@ def find_callers(
         ):
             continue
 
-        cleaned_sql = _strip_comments_and_strings(sql_object.sql)
-        sql_hash = hashlib.sha256(sql_object.sql.encode("utf-8")).hexdigest()[:8]
+        cleaned_sql = strip_comments_and_strings(sql_object.sql)
+        summary = summarize_sql(sql_object.sql)
         logger.info(
             "find_callers: object=%s sql_len=%s sql_hash=%s",
             sql_object.name,
-            len(sql_object.sql),
-            sql_hash,
+            summary["len"],
+            summary["sha256_8"],
         )
 
         matches: list[tuple[str, str]] = []
@@ -168,13 +165,6 @@ def _build_patterns(case_insensitive: bool) -> tuple[re.Pattern[str], re.Pattern
     )
     function_pattern = re.compile(rf"\b(?P<name>{QUALIFIED_NAME_PATTERN})\s*\(", flags)
     return exec_pattern, function_pattern
-
-
-def _strip_comments_and_strings(sql: str) -> str:
-    sql = BLOCK_COMMENT_PATTERN.sub(" ", sql)
-    sql = LINE_COMMENT_PATTERN.sub(" ", sql)
-    sql = STRING_LITERAL_PATTERN.sub("''", sql)
-    return sql
 
 
 def _find_exec_calls(

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 from dataclasses import dataclass
 from importlib import import_module
 from importlib.util import find_spec
 from typing import Any
+
+from app.services.safe_sql import summarize_sql
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +61,11 @@ def build_standardization_spec(
     errors: list[str] = []
 
     if sql is not None:
-        sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
+        summary = summarize_sql(sql)
         logger.info(
             "build_standardization_spec: sql_len=%s sql_hash=%s obj_type=%s",
-            len(sql),
-            sql_hash,
+            summary["len"],
+            summary["sha256_8"],
             obj_type,
         )
     else:

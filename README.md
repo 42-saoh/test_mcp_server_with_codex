@@ -39,8 +39,43 @@ VS Code에서 GitHub Copilot과 연동하여 SP/FN 분석 결과, 변환 가이�
 
 ## MCP API
 
+### Endpoints
+- `GET /health`: 서버 상태 확인 (`{"status":"ok"}`)
 - `POST /mcp/analyze`: SP/FN 분석 결과 반환
+- `POST /mcp/standardize/spec`: 표준화 스펙 생성 (5.1)
+- `POST /mcp/standardize/spec-with-evidence`: 표준화 스펙 + 근거 문서 (5.2)
 - `POST /mcp/callers`: 호출 관계(콜러) 분석
 - `POST /mcp/external-deps`: 외부 의존성 분석
 - `POST /mcp/common/reusability`: 유틸화 가능성 평가(스코어/사유/권장사항)
+- `POST /mcp/common/rules-template`: 비즈니스 규칙 + 템플릿 매핑
+- `POST /mcp/common/call-graph`: 호출 그래프 생성
 - `POST /mcp/migration/mapping-strategy`: Java + MyBatis 매핑 전략 추천
+- `POST /mcp/migration/mybatis-difficulty`: MyBatis 변환 난이도 평가
+- `POST /mcp/migration/transaction-boundary`: 트랜잭션 경계 가이드
+- `POST /mcp/quality/performance-risk`: 성능 리스크 분석
+- `POST /mcp/quality/db-dependency`: DB 의존도 분석
+
+### Notes
+- Offline only (no network, no DB, no API keys required for tests).
+- No raw SQL is returned in API responses.
+- Deterministic outputs for identical inputs (ordering and truncation are stable).
+
+### Example curl
+
+```bash
+curl -X POST http://localhost:9700/mcp/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"<SQL_PLACEHOLDER>","dialect":"tsql"}'
+```
+
+```bash
+curl -X POST http://localhost:9700/mcp/standardize/spec-with-evidence \
+  -H "Content-Type: application/json" \
+  -d '{"object":{"name":"dbo.usp_Name","type":"procedure"},"sql":"<SQL_PLACEHOLDER>","options":{"docs_dir":"data/standard_docs","top_k":3}}'
+```
+
+```bash
+curl -X POST http://localhost:9700/mcp/migration/mapping-strategy \
+  -H "Content-Type: application/json" \
+  -d '{"name":"dbo.usp_Name","type":"procedure","sql":"<SQL_PLACEHOLDER>","options":{"target_style":"rewrite"}}'
+```

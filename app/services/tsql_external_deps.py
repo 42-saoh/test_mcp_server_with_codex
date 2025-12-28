@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from collections.abc import Iterable
+
+from app.services.safe_sql import summarize_sql
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,12 @@ def analyze_external_dependencies(sql: str, options: dict | None = None) -> dict
     case_insensitive = resolved_options["case_insensitive"]
     max_items = resolved_options["max_items"]
 
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
-    logger.info("analyze_external_dependencies: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+    summary = summarize_sql(sql)
+    logger.info(
+        "analyze_external_dependencies: sql_len=%s sql_hash=%s",
+        summary["len"],
+        summary["sha256_8"],
+    )
 
     errors: list[str] = []
     signals: set[str] = set()

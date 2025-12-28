@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 from pathlib import Path
 from typing import Literal
@@ -16,6 +15,7 @@ from app.services.rag_lexical import (
     load_documents,
     search,
 )
+from app.services.safe_sql import summarize_sql
 from app.services.tsql_analyzer import (
     analyze_control_flow,
     analyze_data_changes,
@@ -1108,11 +1108,11 @@ def standardize_spec_with_evidence(
     spec_payload = spec_result.get("spec", _empty_spec_payload())
     errors.extend(spec_result.get("errors", []))
 
-    sql_hash = hashlib.sha256(request.sql.encode("utf-8")).hexdigest()[:8]
+    summary = summarize_sql(request.sql)
     logger.info(
         "standardize_spec_with_evidence: sql_len=%s sql_hash=%s docs_dir=%s",
-        len(request.sql),
-        sql_hash,
+        summary["len"],
+        summary["sha256_8"],
         request.options.docs_dir,
     )
 

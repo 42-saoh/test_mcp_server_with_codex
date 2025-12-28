@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import logging
 import re
 from dataclasses import dataclass
 
+from app.services.safe_sql import strip_comments_and_strings, summarize_sql
+
 logger = logging.getLogger(__name__)
 
 SIGNAL_LIMIT = 10
-
-BLOCK_COMMENT_PATTERN = re.compile(r"/\*.*?\*/", re.DOTALL)
-LINE_COMMENT_PATTERN = re.compile(r"--.*?$", re.MULTILINE)
-STRING_LITERAL_PATTERN = re.compile(r"N'(?:''|[^'])*'|'(?:''|[^'])*'", re.DOTALL)
 
 IDENTIFIER_PATTERN = r"(?:\[[^\]]+\]|[A-Za-z_][\w$#]*)"
 QUALIFIED_NAME_PATTERN = rf"{IDENTIFIER_PATTERN}(?:\s*\.\s*{IDENTIFIER_PATTERN})*"
@@ -78,15 +75,15 @@ def build_call_graph(objects: list[SqlObject], options: Options) -> dict[str, ob
         if caller_id not in node_by_id:
             continue
 
-        sql_hash = hashlib.sha256(obj.sql.encode("utf-8")).hexdigest()[:8]
+        summary = summarize_sql(obj.sql)
         logger.info(
             "build_call_graph: object=%s sql_len=%s sql_hash=%s",
             obj.name,
-            len(obj.sql),
-            sql_hash,
+            summary["len"],
+            summary["sha256_8"],
         )
 
-        cleaned_sql = _normalize_whitespace(_strip_comments_and_strings(obj.sql))
+        cleaned_sql = _normalize_whitespace(strip_comments_and_strings(obj.sql))
 
         for match in exec_pattern.finditer(cleaned_sql):
             name = match.group("name")
@@ -203,13 +200,6 @@ def _build_patterns(
         flags,
     )
     return exec_pattern, function_pattern, function_definition_pattern
-
-
-def _strip_comments_and_strings(sql: str) -> str:
-    sql = BLOCK_COMMENT_PATTERN.sub(" ", sql)
-    sql = LINE_COMMENT_PATTERN.sub(" ", sql)
-    sql = STRING_LITERAL_PATTERN.sub("''", sql)
-    return sql
 
 
 def _normalize_whitespace(sql: str) -> str:

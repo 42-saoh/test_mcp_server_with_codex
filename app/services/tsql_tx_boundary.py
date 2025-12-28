@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 from dataclasses import dataclass
 
+from app.services.safe_sql import summarize_sql
 from app.services.tsql_analyzer import (
     analyze_control_flow,
     analyze_data_changes,
@@ -37,8 +37,12 @@ def recommend_transaction_boundary(
     - When SQL manages transactions, use hybrid guidance and avoid double-transactioning.
     - Confidence decreases with SQL-managed transactions, complexity, and rewrite risks.
     """
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
-    logger.info("recommend_transaction_boundary: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+    summary = summarize_sql(sql)
+    logger.info(
+        "recommend_transaction_boundary: sql_len=%s sql_hash=%s",
+        summary["len"],
+        summary["sha256_8"],
+    )
 
     transactions = analyze_transactions(sql)
     data_changes = analyze_data_changes(sql, dialect)

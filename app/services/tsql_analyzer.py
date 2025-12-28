@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from collections.abc import Iterable
 
 from sqlglot import exp, parse
+
+from app.services.safe_sql import summarize_sql
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,13 @@ CONTROL_FLOW_NESTING_PATTERN = re.compile(
 CONTROL_FLOW_NODE_LIMIT = 200
 CONTROL_FLOW_EDGE_LIMIT = 400
 
+SEVERITY_ORDER = {
+    "critical": 0,
+    "high": 1,
+    "medium": 2,
+    "low": 3,
+}
+
 TABLE_NAME_PATTERN = re.compile(
     r"(?P<table>(?:\[[^\]]+\]|[A-Za-z_][\w$#]*)"
     r"(?:\s*\.\s*(?:\[[^\]]+\]|[A-Za-z_][\w$#]*)){0,2})",
@@ -154,8 +162,12 @@ SELECT_INTO_PATTERN = re.compile(
 
 
 def analyze_references(sql: str, dialect: str = "tsql") -> dict[str, object]:
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
-    logger.info("analyze_references: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+    summary = summarize_sql(sql)
+    logger.info(
+        "analyze_references: sql_len=%s sql_hash=%s",
+        summary["len"],
+        summary["sha256_8"],
+    )
 
     references = {"tables": [], "functions": []}
     errors: list[str] = []
@@ -175,8 +187,12 @@ def analyze_references(sql: str, dialect: str = "tsql") -> dict[str, object]:
 
 
 def analyze_transactions(sql: str) -> dict[str, object]:
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
-    logger.info("analyze_transactions: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+    summary = summarize_sql(sql)
+    logger.info(
+        "analyze_transactions: sql_len=%s sql_hash=%s",
+        summary["len"],
+        summary["sha256_8"],
+    )
 
     begin_count = len(BEGIN_TRAN_PATTERN.findall(sql))
     commit_count = len(COMMIT_TRAN_PATTERN.findall(sql))
@@ -242,8 +258,12 @@ def analyze_transactions(sql: str) -> dict[str, object]:
 
 
 def analyze_migration_impacts(sql: str) -> dict[str, object]:
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
-    logger.info("analyze_migration_impacts: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+    summary = summarize_sql(sql)
+    logger.info(
+        "analyze_migration_impacts: sql_len=%s sql_hash=%s",
+        summary["len"],
+        summary["sha256_8"],
+    )
 
     normalized = re.sub(r"\s+", " ", sql).strip()
     items: dict[str, dict[str, object]] = {}
@@ -467,15 +487,20 @@ def analyze_migration_impacts(sql: str) -> dict[str, object]:
         )
 
     has_impact = bool(items)
-    return {
-        "has_impact": has_impact,
-        "items": list(items.values()),
-    }
+    ordered_items = sorted(
+        items.values(),
+        key=lambda item: (SEVERITY_ORDER.get(item["severity"], 99), item["id"]),
+    )
+    return {"has_impact": has_impact, "items": ordered_items}
 
 
 def analyze_control_flow(sql: str, dialect: str = "tsql") -> dict[str, object]:
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
-    logger.info("analyze_control_flow: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+    summary = summarize_sql(sql)
+    logger.info(
+        "analyze_control_flow: sql_len=%s sql_hash=%s",
+        summary["len"],
+        summary["sha256_8"],
+    )
 
     errors: list[str] = []
     ast_counts = {"if": 0, "try": 0, "return": 0}
@@ -544,8 +569,12 @@ def analyze_control_flow(sql: str, dialect: str = "tsql") -> dict[str, object]:
 
 
 def analyze_data_changes(sql: str, dialect: str = "tsql") -> dict[str, object]:
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
-    logger.info("analyze_data_changes: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+    summary = summarize_sql(sql)
+    logger.info(
+        "analyze_data_changes: sql_len=%s sql_hash=%s",
+        summary["len"],
+        summary["sha256_8"],
+    )
 
     operations = {
         "insert": {"count": 0, "tables": []},
@@ -635,8 +664,12 @@ def analyze_data_changes(sql: str, dialect: str = "tsql") -> dict[str, object]:
 
 
 def analyze_error_handling(sql: str) -> dict[str, object]:
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:8]
-    logger.info("analyze_error_handling: sql_len=%s sql_hash=%s", len(sql), sql_hash)
+    summary = summarize_sql(sql)
+    logger.info(
+        "analyze_error_handling: sql_len=%s sql_hash=%s",
+        summary["len"],
+        summary["sha256_8"],
+    )
 
     stripped = _strip_sql_comments(sql)
 
