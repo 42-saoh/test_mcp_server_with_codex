@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: T-SQL 분석/추천 로직을 제공하는 서비스 모듈이다.
+# - 제공 기능: 분석 결과 요약, 위험도 평가, 전략 추천 등의 함수를 포함한다.
+# - 입력/출력: SQL 또는 옵션을 입력받아 구조화된 dict 결과를 반환한다.
+# - 주의 사항: 원문 SQL은 요약/해시로만 다루며 직접 노출하지 않는다.
+# - 연관 모듈: app.api.mcp 라우터에서 호출된다.
 from __future__ import annotations
 
 import logging
@@ -12,6 +18,11 @@ MAX_SIGNAL_ITEMS = 15
 MAX_CONDITION_LENGTH = 160
 
 
+# [클래스 설명]
+# - 역할: Rule 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class Rule:
     id: str
@@ -22,6 +33,11 @@ class Rule:
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: TemplateSuggestion 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class TemplateSuggestion:
     rule_id: str
@@ -42,6 +58,13 @@ TEMPLATE_REGISTRY: dict[str, str] = {
 }
 
 
+# [함수 설명]
+# - 목적: analyze_business_rules 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 주요 키는 summary, rules, template_suggestions, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def analyze_business_rules(
     sql: str,
     dialect: str = "tsql",
@@ -189,6 +212,13 @@ def analyze_business_rules(
     }
 
 
+# [함수 설명]
+# - 목적: _preprocess_sql 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _preprocess_sql(sql: str) -> str:
     without_strings = re.sub(r"'(?:''|[^'])*'", "'?'", sql)
     without_block_comments = re.sub(r"/\*.*?\*/", " ", without_strings, flags=re.DOTALL)
@@ -197,12 +227,24 @@ def _preprocess_sql(sql: str) -> str:
     return re.sub(r"\s+", " ", normalized_identifiers).strip()
 
 
+# [클래스 설명]
+# - 역할: IfConditionMatch 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class IfConditionMatch:
     condition: str
     end: int
 
 
+# [함수 설명]
+# - 목적: _iter_if_conditions 처리 로직을 수행한다.
+# - 입력: sql: str, flags: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _iter_if_conditions(sql: str, flags: int) -> list[IfConditionMatch]:
     matches: list[IfConditionMatch] = []
     pattern = re.compile(
@@ -214,6 +256,13 @@ def _iter_if_conditions(sql: str, flags: int) -> list[IfConditionMatch]:
     return matches
 
 
+# [함수 설명]
+# - 목적: _is_guard_condition 처리 로직을 수행한다.
+# - 입력: condition: str, flags: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _is_guard_condition(condition: str, flags: int) -> bool:
     null_check = re.search(r"\bIS\s+NULL\b", condition, flags)
     empty_string = re.search(r"=\s*'\\?'|=\s*''", condition)
@@ -226,6 +275,13 @@ def _is_guard_condition(condition: str, flags: int) -> bool:
     return bool(null_check or empty_string or len_zero or nullif_check)
 
 
+# [함수 설명]
+# - 목적: _guard_signals 처리 로직을 수행한다.
+# - 입력: condition: str, flags: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _guard_signals(condition: str, flags: int) -> list[str]:
     signals = ["IF"]
     if re.search(r"\bIS\s+NULL\b", condition, flags):
@@ -239,6 +295,13 @@ def _guard_signals(condition: str, flags: int) -> list[str]:
     return signals
 
 
+# [함수 설명]
+# - 목적: _is_range_condition 처리 로직을 수행한다.
+# - 입력: condition: str, flags: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _is_range_condition(condition: str, flags: int) -> str | None:
     comparison = re.search(
         r"@[\w]+\s*(<=|>=|<|>)\s*-?\d+(?:\.\d+)?",
@@ -257,14 +320,35 @@ def _is_range_condition(condition: str, flags: int) -> str | None:
     return None
 
 
+# [함수 설명]
+# - 목적: _is_exists_condition 처리 로직을 수행한다.
+# - 입력: condition: str, flags: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _is_exists_condition(condition: str, flags: int) -> bool:
     return bool(re.search(r"\bEXISTS\s*\(", condition, flags))
 
 
+# [함수 설명]
+# - 목적: _is_not_exists 처리 로직을 수행한다.
+# - 입력: condition: str, flags: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _is_not_exists(condition: str, flags: int) -> bool:
     return bool(re.search(r"\bNOT\s+EXISTS\b", condition, flags))
 
 
+# [함수 설명]
+# - 목적: _action_from_window 처리 로직을 수행한다.
+# - 입력: sql: str, start: int, flags: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _action_from_window(sql: str, start: int, flags: int) -> str:
     window = sql[start : start + 220]
     if re.search(r"\bTHROW\b|\bRAISERROR\b", window, flags):
@@ -274,6 +358,13 @@ def _action_from_window(sql: str, start: int, flags: int) -> str:
     return "branch"
 
 
+# [함수 설명]
+# - 목적: _action_signal 처리 로직을 수행한다.
+# - 입력: action: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _action_signal(action: str) -> str | None:
     if action == "raise_error":
         return "THROW"
@@ -282,6 +373,13 @@ def _action_signal(action: str) -> str | None:
     return None
 
 
+# [함수 설명]
+# - 목적: _sanitize_condition 처리 로직을 수행한다.
+# - 입력: condition: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sanitize_condition(condition: str) -> str:
     sanitized = re.sub(r"'(?:''|[^'])*'", "'?'", condition)
     sanitized = re.sub(r"\b-?\d+(?:\.\d+)?\b", "?", sanitized)
@@ -292,10 +390,24 @@ def _sanitize_condition(condition: str) -> str:
     return sanitized
 
 
+# [함수 설명]
+# - 목적: _rule_id 처리 로직을 수행한다.
+# - 입력: counter: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _rule_id(counter: int) -> str:
     return f"R{counter:03d}"
 
 
+# [함수 설명]
+# - 목적: _detect_soft_delete_filters 처리 로직을 수행한다.
+# - 입력: sql: str, counter: int, flags: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_soft_delete_filters(sql: str, counter: int, flags: int) -> list[Rule]:
     patterns = [
         (r"\bis_deleted\s*=\s*0\b", "is_deleted = ?"),
@@ -305,6 +417,13 @@ def _detect_soft_delete_filters(sql: str, counter: int, flags: int) -> list[Rule
     return _detect_predicate_rules(sql, counter, patterns, "soft_delete_filter", flags)
 
 
+# [함수 설명]
+# - 목적: _detect_status_filters 처리 로직을 수행한다.
+# - 입력: sql: str, counter: int, flags: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_status_filters(sql: str, counter: int, flags: int) -> list[Rule]:
     patterns = [
         (r"\buse_yn\s*=\s*'\\?'\b", "use_yn = ?"),
@@ -314,6 +433,13 @@ def _detect_status_filters(sql: str, counter: int, flags: int) -> list[Rule]:
     return _detect_predicate_rules(sql, counter, patterns, "status_filter", flags)
 
 
+# [함수 설명]
+# - 목적: _detect_predicate_rules 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_predicate_rules(
     sql: str,
     counter: int,
@@ -343,6 +469,13 @@ def _detect_predicate_rules(
     return found
 
 
+# [함수 설명]
+# - 목적: _detect_case_mappings 처리 로직을 수행한다.
+# - 입력: sql: str, counter: int, flags: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_case_mappings(sql: str, counter: int, flags: int) -> list[Rule]:
     matches = list(re.finditer(r"\bCASE\b", sql, flags))
     if not matches:
@@ -370,6 +503,13 @@ def _detect_case_mappings(sql: str, counter: int, flags: int) -> list[Rule]:
     return found
 
 
+# [함수 설명]
+# - 목적: _map_templates 처리 로직을 수행한다.
+# - 입력: rules: list[Rule]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _map_templates(rules: list[Rule]) -> list[TemplateSuggestion]:
     suggestions: list[TemplateSuggestion] = []
     for rule in rules:
@@ -396,6 +536,13 @@ def _map_templates(rules: list[Rule]) -> list[TemplateSuggestion]:
     return suggestions
 
 
+# [함수 설명]
+# - 목적: _primary_template 처리 로직을 수행한다.
+# - 입력: rule: Rule
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _primary_template(rule: Rule) -> str | None:
     if rule.kind == "guard_clause":
         return "TPL_VALIDATE_REQUIRED_PARAM"
@@ -414,6 +561,13 @@ def _primary_template(rule: Rule) -> str | None:
     return None
 
 
+# [함수 설명]
+# - 목적: _dedupe_signals 처리 로직을 수행한다.
+# - 입력: signals: list[str]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _dedupe_signals(signals: list[str]) -> list[str]:
     flattened: list[str] = []
     for signal in signals:

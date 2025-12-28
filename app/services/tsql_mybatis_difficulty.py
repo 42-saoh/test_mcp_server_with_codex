@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: T-SQL 분석/추천 로직을 제공하는 서비스 모듈이다.
+# - 제공 기능: 분석 결과 요약, 위험도 평가, 전략 추천 등의 함수를 포함한다.
+# - 입력/출력: SQL 또는 옵션을 입력받아 구조화된 dict 결과를 반환한다.
+# - 주의 사항: 원문 SQL은 요약/해시로만 다루며 직접 노출하지 않는다.
+# - 연관 모듈: app.api.mcp 라우터에서 호출된다.
 from __future__ import annotations
 
 import logging
@@ -16,6 +22,11 @@ from app.services.tsql_analyzer import (
 logger = logging.getLogger(__name__)
 
 
+# [클래스 설명]
+# - 역할: FactorItem 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class FactorItem:
     id: str
@@ -23,12 +34,24 @@ class FactorItem:
     message: str
 
 
+# [클래스 설명]
+# - 역할: RecommendationItem 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class RecommendationItem:
     id: str
     message: str
 
 
+# [함수 설명]
+# - 목적: evaluate_mybatis_difficulty 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 주요 키는 summary, signals, factors, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def evaluate_mybatis_difficulty(
     sql: str,
     obj_type: str,
@@ -84,6 +107,13 @@ def evaluate_mybatis_difficulty(
 
     factors: list[FactorItem] = []
 
+    # [함수 설명]
+    # - 목적: add_factor 처리 로직을 수행한다.
+    # - 입력: item_id: str, points: int, message: str
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_factor(item_id: str, points: int, message: str) -> None:
         factors.append(FactorItem(id=item_id, points=points, message=message))
 
@@ -262,6 +292,13 @@ def evaluate_mybatis_difficulty(
     }
 
 
+# [함수 설명]
+# - 목적: _difficulty_level 처리 로직을 수행한다.
+# - 입력: score: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _difficulty_level(score: int) -> str:
     if score <= 24:
         return "low"
@@ -272,6 +309,13 @@ def _difficulty_level(score: int) -> str:
     return "very_high"
 
 
+# [함수 설명]
+# - 목적: _confidence_score 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _confidence_score(
     difficulty_level: str,
     has_dynamic_sql: bool,
@@ -292,6 +336,13 @@ def _confidence_score(
     return 0.55
 
 
+# [함수 설명]
+# - 목적: _error_signaling 처리 로직을 수행한다.
+# - 입력: error_handling: dict[str, object], case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _error_signaling(error_handling: dict[str, object], case_insensitive: bool) -> list[str]:
     signals: set[str] = set()
     if error_handling.get("has_try_catch"):
@@ -311,6 +362,13 @@ def _error_signaling(error_handling: dict[str, object], case_insensitive: bool) 
     return sorted(signals)
 
 
+# [함수 설명]
+# - 목적: _normalize_factors 처리 로직을 수행한다.
+# - 입력: factors: list[FactorItem]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_factors(factors: list[FactorItem]) -> list[dict[str, object]]:
     by_id: dict[str, FactorItem] = {}
     for factor in factors:
@@ -324,6 +382,13 @@ def _normalize_factors(factors: list[FactorItem]) -> list[dict[str, object]]:
     ]
 
 
+# [함수 설명]
+# - 목적: _recommendations_for_factors 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _recommendations_for_factors(
     factors: list[dict[str, object]],
     difficulty_level: str,
@@ -332,6 +397,13 @@ def _recommendations_for_factors(
     factor_ids = {item["id"] for item in factors}
     recommendations: list[RecommendationItem] = []
 
+    # [함수 설명]
+    # - 목적: add_recommendation 처리 로직을 수행한다.
+    # - 입력: item_id: str, message: str
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_recommendation(item_id: str, message: str) -> None:
         recommendations.append(RecommendationItem(id=item_id, message=message))
 
@@ -385,6 +457,13 @@ def _recommendations_for_factors(
     ]
 
 
+# [함수 설명]
+# - 목적: _apply_max_items 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _apply_max_items(
     factors: list[dict[str, object]],
     recommendations: list[dict[str, str]],
@@ -416,5 +495,12 @@ def _apply_max_items(
     )
 
 
+# [함수 설명]
+# - 목적: _sorted_unique 처리 로직을 수행한다.
+# - 입력: items: list[str]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sorted_unique(items: list[str]) -> list[str]:
     return sorted({item for item in items if item})

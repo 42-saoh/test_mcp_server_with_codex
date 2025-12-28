@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: T-SQL 분석/추천 로직을 제공하는 서비스 모듈이다.
+# - 제공 기능: 분석 결과 요약, 위험도 평가, 전략 추천 등의 함수를 포함한다.
+# - 입력/출력: SQL 또는 옵션을 입력받아 구조화된 dict 결과를 반환한다.
+# - 주의 사항: 원문 SQL은 요약/해시로만 다루며 직접 노출하지 않는다.
+# - 연관 모듈: app.api.mcp 라우터에서 호출된다.
 from __future__ import annotations
 
 import logging
@@ -120,6 +126,13 @@ RECOMMENDATION_MAP = {
 }
 
 
+# [함수 설명]
+# - 목적: analyze_performance_risk 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 주요 키는 summary, signals, findings, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def analyze_performance_risk(
     sql: str,
     dialect: str = "tsql",
@@ -145,6 +158,13 @@ def analyze_performance_risk(
     errors: list[str] = []
     seen_findings: set[str] = set()
 
+    # [함수 설명]
+    # - 목적: add_finding 처리 로직을 수행한다.
+    # - 입력: 함수 시그니처 인자
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_finding(
         finding_id: str,
         severity: str,
@@ -381,6 +401,13 @@ def analyze_performance_risk(
     }
 
 
+# [함수 설명]
+# - 목적: _build_summary 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_summary(
     findings: list[dict[str, Any]],
     truncated: bool,
@@ -401,6 +428,13 @@ def _build_summary(
     }
 
 
+# [함수 설명]
+# - 목적: _build_signals 처리 로직을 수행한다.
+# - 입력: sql: str, dialect: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_signals(sql: str, dialect: str) -> dict[str, Any]:
     from app.services.tsql_analyzer import (
         analyze_control_flow,
@@ -431,6 +465,13 @@ def _build_signals(sql: str, dialect: str) -> dict[str, Any]:
     }
 
 
+# [함수 설명]
+# - 목적: _build_recommendations 처리 로직을 수행한다.
+# - 입력: findings: list[dict[str, Any]]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_recommendations(findings: list[dict[str, Any]]) -> list[dict[str, str]]:
     recommendations: dict[str, str] = {}
     for item in findings:
@@ -445,6 +486,13 @@ def _build_recommendations(findings: list[dict[str, Any]]) -> list[dict[str, str
     ]
 
 
+# [함수 설명]
+# - 목적: _calculate_risk_score 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _calculate_risk_score(
     severity_counts: dict[str, int],
     cyclomatic_complexity: int,
@@ -461,6 +509,13 @@ def _calculate_risk_score(
     return max(0, min(100, score))
 
 
+# [함수 설명]
+# - 목적: _risk_level 처리 로직을 수행한다.
+# - 입력: score: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _risk_level(score: int) -> str:
     if score >= 75:
         return "critical"
@@ -471,23 +526,58 @@ def _risk_level(score: int) -> str:
     return "low"
 
 
+# [함수 설명]
+# - 목적: _strip_comments 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _strip_comments(sql: str) -> str:
     without_block = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL)
     return re.sub(r"--[^\n]*", " ", without_block)
 
 
+# [함수 설명]
+# - 목적: _mask_string_literals 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _mask_string_literals(sql: str) -> str:
     return re.sub(r"'(?:''|[^'])*'", "''", sql)
 
 
+# [함수 설명]
+# - 목적: _normalize_whitespace 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_whitespace(sql: str) -> str:
     return re.sub(r"\s+", " ", sql).strip()
 
 
+# [함수 설명]
+# - 목적: _detect_leading_wildcard_like 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_leading_wildcard_like(sql: str) -> bool:
     return bool(re.search(r"\bLIKE\s+N?'\s*%", sql, flags=re.IGNORECASE))
 
 
+# [함수 설명]
+# - 목적: _detect_large_in_list 처리 로직을 수행한다.
+# - 입력: sql: str, threshold: int = 20
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_large_in_list(sql: str, threshold: int = 20) -> bool:
     for match in re.finditer(r"\bIN\s*\(([^)]*)\)", sql, flags=re.IGNORECASE | re.DOTALL):
         content = match.group(1)
@@ -499,6 +589,13 @@ def _detect_large_in_list(sql: str, threshold: int = 20) -> bool:
     return False
 
 
+# [함수 설명]
+# - 목적: _detect_missing_where 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_missing_where(
     normalized_sql: str,
     scan_sql: str,
@@ -532,10 +629,24 @@ def _detect_missing_where(
     return "present"
 
 
+# [함수 설명]
+# - 목적: _has_cursor 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _has_cursor(scan_sql: str) -> bool:
     return bool(re.search(r"\bCURSOR\b", scan_sql, flags=re.IGNORECASE))
 
 
+# [함수 설명]
+# - 목적: _has_loop_dml 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _has_loop_dml(scan_sql: str) -> bool:
     for match in re.finditer(r"\bWHILE\b", scan_sql, flags=re.IGNORECASE):
         window = scan_sql[match.end() : match.end() + 300]
@@ -544,24 +655,59 @@ def _has_loop_dml(scan_sql: str) -> bool:
     return False
 
 
+# [함수 설명]
+# - 목적: _has_dynamic_sql 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _has_dynamic_sql(scan_sql: str) -> bool:
     if re.search(r"\bSP_EXECUTESQL\b", scan_sql, flags=re.IGNORECASE):
         return True
     return bool(re.search(r"\bEXEC(?:UTE)?\s*\(?\s*@\w+", scan_sql, flags=re.IGNORECASE))
 
 
+# [함수 설명]
+# - 목적: _detect_select_into 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_select_into(scan_sql: str) -> bool:
     return bool(re.search(r"\bSELECT\b[\s\S]*?\bINTO\b", scan_sql, flags=re.IGNORECASE))
 
 
+# [함수 설명]
+# - 목적: _detect_merge 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_merge(scan_sql: str) -> bool:
     return bool(re.search(r"\bMERGE\b", scan_sql, flags=re.IGNORECASE))
 
 
+# [함수 설명]
+# - 목적: _detect_select_star 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_select_star(scan_sql: str) -> bool:
     return bool(re.search(r"\bSELECT\s+(?:TOP\s+\d+\s+)?\*", scan_sql, flags=re.IGNORECASE))
 
 
+# [함수 설명]
+# - 목적: _detect_function_on_column 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_function_on_column(scan_sql: str) -> bool:
     return bool(
         re.search(
@@ -572,6 +718,13 @@ def _detect_function_on_column(scan_sql: str) -> bool:
     )
 
 
+# [함수 설명]
+# - 목적: _detect_implicit_conversion 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_implicit_conversion(scan_sql: str) -> bool:
     return bool(
         re.search(
@@ -582,6 +735,13 @@ def _detect_implicit_conversion(scan_sql: str) -> bool:
     )
 
 
+# [함수 설명]
+# - 목적: _detect_or_chain 처리 로직을 수행한다.
+# - 입력: scan_sql: str, threshold: int = 5
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_or_chain(scan_sql: str, threshold: int = 5) -> bool:
     for match in re.finditer(
         r"\bWHERE\b([\s\S]*?)(?:\bGROUP\b|\bORDER\b|\bHAVING\b|\bUNION\b|;|$)",
@@ -594,22 +754,57 @@ def _detect_or_chain(scan_sql: str, threshold: int = 5) -> bool:
     return False
 
 
+# [함수 설명]
+# - 목적: _detect_scalar_udf 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_scalar_udf(scan_sql: str) -> bool:
     return bool(re.search(r"\b(?:\w+\.)?fn_[A-Za-z0-9_]+\s*\(", scan_sql, flags=re.IGNORECASE))
 
 
+# [함수 설명]
+# - 목적: _detect_nolock 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_nolock(scan_sql: str) -> bool:
     return bool(re.search(r"\bNOLOCK\b", scan_sql, flags=re.IGNORECASE))
 
 
+# [함수 설명]
+# - 목적: _detect_table_variable 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_table_variable(scan_sql: str) -> bool:
     return bool(re.search(r"\bDECLARE\s+@\w+\s+TABLE\b", scan_sql, flags=re.IGNORECASE))
 
 
+# [함수 설명]
+# - 목적: _detect_temp_table 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_temp_table(scan_sql: str) -> bool:
     return bool(re.search(r"\B##?\w+", scan_sql, flags=re.IGNORECASE))
 
 
+# [함수 설명]
+# - 목적: _detect_order_by_no_top 처리 로직을 수행한다.
+# - 입력: scan_sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_order_by_no_top(scan_sql: str) -> bool:
     for statement in scan_sql.split(";"):
         if "ORDER BY" in statement.upper() and " TOP " not in statement.upper():

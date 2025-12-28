@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: T-SQL 분석/추천 로직을 제공하는 서비스 모듈이다.
+# - 제공 기능: 분석 결과 요약, 위험도 평가, 전략 추천 등의 함수를 포함한다.
+# - 입력/출력: SQL 또는 옵션을 입력받아 구조화된 dict 결과를 반환한다.
+# - 주의 사항: 원문 SQL은 요약/해시로만 다루며 직접 노출하지 않는다.
+# - 연관 모듈: app.api.mcp 라우터에서 호출된다.
 from __future__ import annotations
 
 import logging
@@ -19,6 +25,13 @@ SIGNAL_LIMIT = 15
 EXCLUDED_DB_NAMES = {"dbo", "sys", "information_schema"}
 
 
+# [함수 설명]
+# - 목적: analyze_external_dependencies 처리 로직을 수행한다.
+# - 입력: sql: str, options: dict | None = None
+# - 출력: 주요 키는 summary, external_dependencies, signals, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def analyze_external_dependencies(sql: str, options: dict | None = None) -> dict[str, object]:
     resolved_options = _resolve_options(options)
     case_insensitive = resolved_options["case_insensitive"]
@@ -143,6 +156,13 @@ def analyze_external_dependencies(sql: str, options: dict | None = None) -> dict
     }
 
 
+# [함수 설명]
+# - 목적: _resolve_options 처리 로직을 수행한다.
+# - 입력: options: dict | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _resolve_options(options: dict | None) -> dict[str, object]:
     resolved = {"case_insensitive": True, "max_items": 200, "name": "", "type": ""}
     if options:
@@ -150,6 +170,13 @@ def _resolve_options(options: dict | None) -> dict[str, object]:
     return resolved
 
 
+# [함수 설명]
+# - 목적: _build_patterns 처리 로직을 수행한다.
+# - 입력: case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_patterns(case_insensitive: bool) -> dict[str, re.Pattern[str]]:
     flags = re.IGNORECASE if case_insensitive else 0
     return {
@@ -173,15 +200,36 @@ def _build_patterns(case_insensitive: bool) -> dict[str, re.Pattern[str]]:
     }
 
 
+# [함수 설명]
+# - 목적: _strip_comments 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _strip_comments(sql: str) -> str:
     sql = BLOCK_COMMENT_PATTERN.sub(" ", sql)
     return LINE_COMMENT_PATTERN.sub(" ", sql)
 
 
+# [함수 설명]
+# - 목적: _replace_string_literals 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _replace_string_literals(sql: str) -> str:
     return STRING_LITERAL_PATTERN.sub("''", sql)
 
 
+# [함수 설명]
+# - 목적: _detect_clr_signals 처리 로직을 수행한다.
+# - 입력: sql: str, case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_clr_signals(sql: str, case_insensitive: bool) -> list[str]:
     flags = re.IGNORECASE if case_insensitive else 0
     signals: set[str] = set()
@@ -198,6 +246,13 @@ def _detect_clr_signals(sql: str, case_insensitive: bool) -> list[str]:
     return _sorted_unique(signals)
 
 
+# [함수 설명]
+# - 목적: _clean_identifier 처리 로직을 수행한다.
+# - 입력: identifier: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _clean_identifier(identifier: str) -> str:
     identifier = identifier.strip()
     if identifier.startswith("[") and identifier.endswith("]"):
@@ -205,12 +260,26 @@ def _clean_identifier(identifier: str) -> str:
     return identifier
 
 
+# [함수 설명]
+# - 목적: _add_signal 처리 로직을 수행한다.
+# - 입력: targets: dict[str, set[str]], name: str, signal: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _add_signal(targets: dict[str, set[str]], name: str, signal: str) -> None:
     if not name:
         return
     targets.setdefault(name, set()).add(signal)
 
 
+# [함수 설명]
+# - 목적: _build_linked_server_list 처리 로직을 수행한다.
+# - 입력: linked_servers: dict[str, set[str]]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_linked_server_list(linked_servers: dict[str, set[str]]) -> list[dict[str, object]]:
     items = [
         {"name": name, "signals": _sorted_unique(signals)}
@@ -220,6 +289,13 @@ def _build_linked_server_list(linked_servers: dict[str, set[str]]) -> list[dict[
     return items
 
 
+# [함수 설명]
+# - 목적: _build_cross_database_list 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_cross_database_list(
     cross_database: Iterable[tuple[str, str, str, str]],
 ) -> list[dict[str, object]]:
@@ -242,6 +318,13 @@ def _build_cross_database_list(
     return items
 
 
+# [함수 설명]
+# - 목적: _build_target_list 처리 로직을 수행한다.
+# - 입력: targets: dict[str, set[str]], kind: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_target_list(targets: dict[str, set[str]], kind: str) -> list[dict[str, object]]:
     items = [
         {"target": target, "kind": kind, "signals": _sorted_unique(signals)}
@@ -251,6 +334,13 @@ def _build_target_list(targets: dict[str, set[str]], kind: str) -> list[dict[str
     return items
 
 
+# [함수 설명]
+# - 목적: _build_other_list 처리 로직을 수행한다.
+# - 입력: others: dict[str, set[str]]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_other_list(others: dict[str, set[str]]) -> list[dict[str, object]]:
     items = [
         {"id": key, "kind": _infer_other_kind(key), "signals": _sorted_unique(signals)}
@@ -260,17 +350,38 @@ def _build_other_list(others: dict[str, set[str]]) -> list[dict[str, object]]:
     return items
 
 
+# [함수 설명]
+# - 목적: _infer_other_kind 처리 로직을 수행한다.
+# - 입력: key: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _infer_other_kind(key: str) -> str:
     if key == "EXT_XP_CMDSHELL":
         return "xp_cmdshell"
     return "clr"
 
 
+# [함수 설명]
+# - 목적: _span_within 처리 로직을 수행한다.
+# - 입력: span: tuple[int, int], spans: Iterable[tuple[int, int]]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _span_within(span: tuple[int, int], spans: Iterable[tuple[int, int]]) -> bool:
     start, end = span
     return any(start >= span_start and end <= span_end for span_start, span_end in spans)
 
 
+# [함수 설명]
+# - 목적: _apply_limit 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _apply_limit(
     items: list[dict[str, object]], max_items: int, errors: list[str], label: str
 ) -> list[dict[str, object]]:
@@ -280,5 +391,12 @@ def _apply_limit(
     return items[:max_items]
 
 
+# [함수 설명]
+# - 목적: _sorted_unique 처리 로직을 수행한다.
+# - 입력: values: Iterable[str]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sorted_unique(values: Iterable[str]) -> list[str]:
     return sorted({value for value in values if value})

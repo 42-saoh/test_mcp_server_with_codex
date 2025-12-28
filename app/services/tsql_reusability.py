@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: T-SQL 분석/추천 로직을 제공하는 서비스 모듈이다.
+# - 제공 기능: 분석 결과 요약, 위험도 평가, 전략 추천 등의 함수를 포함한다.
+# - 입력/출력: SQL 또는 옵션을 입력받아 구조화된 dict 결과를 반환한다.
+# - 주의 사항: 원문 SQL은 요약/해시로만 다루며 직접 노출하지 않는다.
+# - 연관 모듈: app.api.mcp 라우터에서 호출된다.
 from __future__ import annotations
 
 import logging
@@ -17,6 +23,11 @@ from app.services.tsql_analyzer import (
 logger = logging.getLogger(__name__)
 
 
+# [클래스 설명]
+# - 역할: Reason 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class Reason:
     id: str
@@ -25,12 +36,24 @@ class Reason:
     message: str
 
 
+# [클래스 설명]
+# - 역할: Recommendation 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class Recommendation:
     id: str
     message: str
 
 
+# [함수 설명]
+# - 목적: evaluate_reusability 처리 로직을 수행한다.
+# - 입력: sql: str, dialect: str = "tsql", max_reason_items: int = 20
+# - 출력: 주요 키는 summary, signals, reasons, recommendations, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def evaluate_reusability(sql: str, dialect: str = "tsql", max_reason_items: int = 20) -> dict:
     """Evaluate reusability/utility candidacy for a single T-SQL SP/FN definition.
 
@@ -73,9 +96,23 @@ def evaluate_reusability(sql: str, dialect: str = "tsql", max_reason_items: int 
     reasons: list[Reason] = []
     recommendations: list[Recommendation] = []
 
+    # [함수 설명]
+    # - 목적: add_reason 처리 로직을 수행한다.
+    # - 입력: reason: Reason
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_reason(reason: Reason) -> None:
         reasons.append(reason)
 
+    # [함수 설명]
+    # - 목적: add_recommendation 처리 로직을 수행한다.
+    # - 입력: rec: Recommendation
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_recommendation(rec: Recommendation) -> None:
         recommendations.append(rec)
 
@@ -290,6 +327,13 @@ def evaluate_reusability(sql: str, dialect: str = "tsql", max_reason_items: int 
     }
 
 
+# [함수 설명]
+# - 목적: _error_signaling 처리 로직을 수행한다.
+# - 입력: error_handling: dict[str, object]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _error_signaling(error_handling: dict[str, object]) -> list[str]:
     signals: list[str] = []
     if error_handling.get("uses_throw"):
@@ -301,6 +345,13 @@ def _error_signaling(error_handling: dict[str, object]) -> list[str]:
     return sorted(set(signals))
 
 
+# [함수 설명]
+# - 목적: _grade 처리 로직을 수행한다.
+# - 입력: score: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _grade(score: int) -> str:
     if score >= 80:
         return "A"
@@ -311,6 +362,13 @@ def _grade(score: int) -> str:
     return "D"
 
 
+# [함수 설명]
+# - 목적: _candidate_type 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _candidate_type(
     sql: str,
     *,
@@ -328,16 +386,37 @@ def _candidate_type(
     return None
 
 
+# [함수 설명]
+# - 목적: _has_guard_checks 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _has_guard_checks(sql: str) -> bool:
     stripped = _strip_sql_comments(sql).lower()
     return bool(re.search(r"\bif\s+exists\b", stripped) or re.search(r"\bexists\s*\(", stripped))
 
 
+# [함수 설명]
+# - 목적: _strip_sql_comments 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _strip_sql_comments(sql: str) -> str:
     no_block = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL)
     return re.sub(r"--[^\n]*", " ", no_block)
 
 
+# [함수 설명]
+# - 목적: _normalize_reasons 처리 로직을 수행한다.
+# - 입력: reasons: list[Reason], max_items: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_reasons(reasons: list[Reason], max_items: int) -> list[dict[str, object]]:
     by_id: dict[str, Reason] = {}
     for reason in reasons:
@@ -362,6 +441,13 @@ def _normalize_reasons(reasons: list[Reason], max_items: int) -> list[dict[str, 
     ]
 
 
+# [함수 설명]
+# - 목적: _normalize_recommendations 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_recommendations(
     recommendations: list[Recommendation],
 ) -> list[dict[str, str]]:
@@ -375,5 +461,12 @@ def _normalize_recommendations(
     return [{"id": rec.id, "message": rec.message} for rec in sorted_recs]
 
 
+# [함수 설명]
+# - 목적: _sorted_unique 처리 로직을 수행한다.
+# - 입력: items: list[str]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sorted_unique(items: list[str]) -> list[str]:
     return sorted({item for item in items if item})

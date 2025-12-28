@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: T-SQL 분석/추천 로직을 제공하는 서비스 모듈이다.
+# - 제공 기능: 분석 결과 요약, 위험도 평가, 전략 추천 등의 함수를 포함한다.
+# - 입력/출력: SQL 또는 옵션을 입력받아 구조화된 dict 결과를 반환한다.
+# - 주의 사항: 원문 SQL은 요약/해시로만 다루며 직접 노출하지 않는다.
+# - 연관 모듈: app.api.mcp 라우터에서 호출된다.
 from __future__ import annotations
 
 import importlib.util
@@ -96,6 +102,13 @@ RECOMMENDATION_MAP = {
 }
 
 
+# [함수 설명]
+# - 목적: analyze_db_dependency 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 주요 키는 summary, metrics, dependencies, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def analyze_db_dependency(
     sql: str,
     dialect: str = "tsql",
@@ -369,6 +382,13 @@ def analyze_db_dependency(
     }
 
 
+# [함수 설명]
+# - 목적: _strip_comments 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _strip_comments(sql: str) -> str:
     result: list[str] = []
     i = 0
@@ -409,6 +429,13 @@ def _strip_comments(sql: str) -> str:
     return "".join(result)
 
 
+# [함수 설명]
+# - 목적: _mask_string_literals 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _mask_string_literals(sql: str) -> str:
     result: list[str] = []
     i = 0
@@ -443,19 +470,47 @@ def _mask_string_literals(sql: str) -> str:
     return "".join(result)
 
 
+# [함수 설명]
+# - 목적: _normalize_whitespace 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_whitespace(sql: str) -> str:
     return re.sub(r"\s+", " ", sql).strip()
 
 
+# [함수 설명]
+# - 목적: _normalize_bracketed_identifiers 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_bracketed_identifiers(sql: str) -> str:
     without_brackets = re.sub(r"\[([^\]]+)\]", r"\1", sql)
     return re.sub(r"\s*\.\s*", ".", without_brackets)
 
 
+# [함수 설명]
+# - 목적: _normalize_identifier 처리 로직을 수행한다.
+# - 입력: value: str, case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_identifier(value: str, case_insensitive: bool) -> str:
     return value.lower() if case_insensitive else value
 
 
+# [함수 설명]
+# - 목적: _overlaps_any 처리 로직을 수행한다.
+# - 입력: span: tuple[int, int], spans: list[tuple[int, int]]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _overlaps_any(span: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
     start, end = span
     for span_start, span_end in spans:
@@ -464,6 +519,13 @@ def _overlaps_any(span: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
     return False
 
 
+# [함수 설명]
+# - 목적: _add_linked_server 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _add_linked_server(
     linked_servers: dict[str, dict[str, Any]],
     server_name: str,
@@ -478,11 +540,32 @@ def _add_linked_server(
     item["signals"] = sorted(signals)
 
 
+# [함수 설명]
+# - 목적: _sorted_unique 처리 로직을 수행한다.
+# - 입력: values: list[str]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sorted_unique(values: list[str]) -> list[str]:
     return sorted(set(values))
 
 
+# [함수 설명]
+# - 목적: _sort_cross_db 처리 로직을 수행한다.
+# - 입력: items: list[dict[str, Any]], case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sort_cross_db(items: list[dict[str, Any]], case_insensitive: bool) -> list[dict[str, Any]]:
+    # [함수 설명]
+    # - 목적: key 처리 로직을 수행한다.
+    # - 입력: item: dict[str, Any]
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def key(item: dict[str, Any]) -> tuple[str, str, str, str]:
         db = item["database"].lower() if case_insensitive else item["database"]
         schema = item["schema"].lower() if case_insensitive else item["schema"]
@@ -492,16 +575,44 @@ def _sort_cross_db(items: list[dict[str, Any]], case_insensitive: bool) -> list[
     return sorted(items, key=key)
 
 
+# [함수 설명]
+# - 목적: _sort_linked_servers 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sort_linked_servers(
     items: list[dict[str, Any]], case_insensitive: bool
 ) -> list[dict[str, Any]]:
+    # [함수 설명]
+    # - 목적: key 처리 로직을 수행한다.
+    # - 입력: item: dict[str, Any]
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def key(item: dict[str, Any]) -> str:
         return item["name"].lower() if case_insensitive else item["name"]
 
     return sorted(items, key=key)
 
 
+# [함수 설명]
+# - 목적: _sort_remote_exec 처리 로직을 수행한다.
+# - 입력: items: list[dict[str, Any]], case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sort_remote_exec(items: list[dict[str, Any]], case_insensitive: bool) -> list[dict[str, Any]]:
+    # [함수 설명]
+    # - 목적: key 처리 로직을 수행한다.
+    # - 입력: item: dict[str, Any]
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def key(item: dict[str, Any]) -> tuple[str, str]:
         target = item["target"].lower() if case_insensitive else item["target"]
         return (target, item["kind"])
@@ -509,10 +620,24 @@ def _sort_remote_exec(items: list[dict[str, Any]], case_insensitive: bool) -> li
     return sorted(items, key=key)
 
 
+# [함수 설명]
+# - 목적: _sort_simple 처리 로직을 수행한다.
+# - 입력: items: list[dict[str, Any]]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sort_simple(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(items, key=lambda item: item["id"])
 
 
+# [함수 설명]
+# - 목적: _truncate_dependencies 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _truncate_dependencies(
     dependencies: dict[str, list[dict[str, Any]]],
     max_items: int,
@@ -549,24 +674,52 @@ def _truncate_dependencies(
     return new_deps, truncated
 
 
+# [함수 설명]
+# - 목적: _score_linked_servers 처리 로직을 수행한다.
+# - 입력: linked_server_count: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _score_linked_servers(linked_server_count: int) -> int:
     if linked_server_count <= 0:
         return 0
     return min(35 + (linked_server_count - 1) * 10, 55)
 
 
+# [함수 설명]
+# - 목적: _score_cross_db 처리 로직을 수행한다.
+# - 입력: cross_db_count: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _score_cross_db(cross_db_count: int) -> int:
     if cross_db_count <= 0:
         return 0
     return min(10 + max(cross_db_count - 1, 0) * 2, 20)
 
 
+# [함수 설명]
+# - 목적: _score_system_proc 처리 로직을 수행한다.
+# - 입력: system_proc_count: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _score_system_proc(system_proc_count: int) -> int:
     if system_proc_count <= 0:
         return 0
     return min(10 * min(system_proc_count, 2), 20)
 
 
+# [함수 설명]
+# - 목적: _score_tempdb 처리 로직을 수행한다.
+# - 입력: temp_table_present: bool, table_variable_present: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _score_tempdb(temp_table_present: bool, table_variable_present: bool) -> int:
     points = 0
     if temp_table_present:
@@ -576,6 +729,13 @@ def _score_tempdb(temp_table_present: bool, table_variable_present: bool) -> int
     return min(points, 10)
 
 
+# [함수 설명]
+# - 목적: _score_level 처리 로직을 수행한다.
+# - 입력: score: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _score_level(score: int) -> str:
     if score >= 70:
         return "critical"
@@ -586,6 +746,13 @@ def _score_level(score: int) -> str:
     return "low"
 
 
+# [함수 설명]
+# - 목적: _reason_item 처리 로직을 수행한다.
+# - 입력: reason_id: str, weight: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _reason_item(reason_id: str, weight: int) -> dict[str, Any]:
     return {
         "id": reason_id,
@@ -594,6 +761,13 @@ def _reason_item(reason_id: str, weight: int) -> dict[str, Any]:
     }
 
 
+# [함수 설명]
+# - 목적: _optional_reference_metrics 처리 로직을 수행한다.
+# - 입력: sql: str, dialect: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _optional_reference_metrics(sql: str, dialect: str) -> tuple[int, int]:
     if importlib.util.find_spec("app.services.tsql_analyzer") is None:  # pragma: no cover
         return 0, 0

@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: MCP API 라우트를 정의하고 요청/응답 모델을 제공한다.
+# - 제공 기능: 분석, 표준화, 호출 그래프 등 여러 POST 엔드포인트를 제공한다.
+# - 입력/출력: Pydantic 모델로 요청을 수신하고 표준화된 응답 구조를 반환한다.
+# - 주의 사항: 원문 SQL은 로깅/응답에 직접 노출하지 않는 흐름을 유지한다.
+# - 연관 모듈: app.services.* 분석/추천 서비스들과 연결된다.
 from __future__ import annotations
 
 import logging
@@ -60,16 +66,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# [클래스 설명]
+# - 역할: AnalyzeRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class AnalyzeRequest(BaseModel):
     sql: str = Field(..., min_length=1)
     dialect: str = "tsql"
 
 
+# [클래스 설명]
+# - 역할: References Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class References(BaseModel):
     tables: list[str]
     functions: list[str]
 
 
+# [클래스 설명]
+# - 역할: TransactionSummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class TransactionSummary(BaseModel):
     uses_transaction: bool
     begin_count: int
@@ -82,6 +103,11 @@ class TransactionSummary(BaseModel):
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: ImpactItem Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ImpactItem(BaseModel):
     id: str
     category: str
@@ -91,11 +117,21 @@ class ImpactItem(BaseModel):
     details: str
 
 
+# [클래스 설명]
+# - 역할: MigrationImpacts Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MigrationImpacts(BaseModel):
     has_impact: bool
     items: list[ImpactItem]
 
 
+# [클래스 설명]
+# - 역할: ControlFlowSummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ControlFlowSummary(BaseModel):
     has_branching: bool
     has_loops: bool
@@ -110,34 +146,64 @@ class ControlFlowSummary(BaseModel):
     cyclomatic_complexity: int
 
 
+# [클래스 설명]
+# - 역할: ControlFlowNode Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ControlFlowNode(BaseModel):
     id: str
     type: str
     label: str
 
 
+# [클래스 설명]
+# - 역할: ControlFlowEdge Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ControlFlowEdge(BaseModel):
     from_: str = Field(..., alias="from")
     to: str
     label: str
 
 
+# [클래스 설명]
+# - 역할: ControlFlowGraph Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ControlFlowGraph(BaseModel):
     nodes: list[ControlFlowNode]
     edges: list[ControlFlowEdge]
 
 
+# [클래스 설명]
+# - 역할: ControlFlow Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ControlFlow(BaseModel):
     summary: ControlFlowSummary
     graph: ControlFlowGraph
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: DataChangeOperation Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DataChangeOperation(BaseModel):
     count: int
     tables: list[str]
 
 
+# [클래스 설명]
+# - 역할: DataChangeOperations Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DataChangeOperations(BaseModel):
     insert: DataChangeOperation
     update: DataChangeOperation
@@ -147,11 +213,21 @@ class DataChangeOperations(BaseModel):
     select_into: DataChangeOperation
 
 
+# [클래스 설명]
+# - 역할: TableOperation Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class TableOperation(BaseModel):
     table: str
     ops: list[str]
 
 
+# [클래스 설명]
+# - 역할: DataChanges Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DataChanges(BaseModel):
     has_writes: bool
     operations: DataChangeOperations
@@ -160,6 +236,11 @@ class DataChanges(BaseModel):
     notes: list[str]
 
 
+# [클래스 설명]
+# - 역할: ErrorHandling Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ErrorHandling(BaseModel):
     has_try_catch: bool
     try_count: int
@@ -182,6 +263,11 @@ class ErrorHandling(BaseModel):
     notes: list[str]
 
 
+# [클래스 설명]
+# - 역할: AnalyzeResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class AnalyzeResponse(BaseModel):
     version: str
     references: References
@@ -193,11 +279,21 @@ class AnalyzeResponse(BaseModel):
     errors: list[str]
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecObject Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecObject(BaseModel):
     name: str
     type: str
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecOptions Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecOptions(BaseModel):
     dialect: str = "tsql"
     case_insensitive: bool = True
@@ -205,12 +301,24 @@ class StandardizeSpecOptions(BaseModel):
     max_items_per_section: int = 50
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecRequest(BaseModel):
     object: StandardizeSpecObject
     sql: str | None = None
     inputs: dict[str, dict[str, object]] | None = None
     options: StandardizeSpecOptions = Field(default_factory=StandardizeSpecOptions)
 
+    # [함수 설명]
+    # - 목적: validate_payload 처리 로직을 수행한다.
+    # - 입력: self
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     @model_validator(mode="after")
     def validate_payload(self) -> StandardizeSpecRequest:
         if self.sql and self.inputs:
@@ -220,24 +328,44 @@ class StandardizeSpecRequest(BaseModel):
         return self
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecObjectResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecObjectResponse(BaseModel):
     name: str
     type: str
     normalized: str
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecSummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecSummary(BaseModel):
     one_liner: str
     risk_level: str
     difficulty_level: str
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecTemplate Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecTemplate(BaseModel):
     id: str
     source: str
     confidence: float
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecRule Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecRule(BaseModel):
     id: str
     kind: str
@@ -245,6 +373,11 @@ class StandardizeSpecRule(BaseModel):
     action: str
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecDependencies Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecDependencies(BaseModel):
     tables: list[str]
     functions: list[str]
@@ -252,32 +385,62 @@ class StandardizeSpecDependencies(BaseModel):
     linked_servers: list[str]
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecTransactions Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecTransactions(BaseModel):
     recommended_boundary: str | None
     propagation: str | None
     isolation_level: str | None
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecMyBatis Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecMyBatis(BaseModel):
     approach: str
     difficulty_score: int | None
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecRisks Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecRisks(BaseModel):
     migration_impacts: list[str]
     performance: list[str]
     db_dependency: list[str]
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecRecommendation Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecRecommendation(BaseModel):
     id: str
     message: str
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecEvidence Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecEvidence(BaseModel):
     signals: dict[str, object]
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecPayload Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecPayload(BaseModel):
     tags: list[str]
     summary: StandardizeSpecSummary
@@ -291,6 +454,11 @@ class StandardizeSpecPayload(BaseModel):
     evidence: StandardizeSpecEvidence
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecResponse(BaseModel):
     version: str
     object: StandardizeSpecObjectResponse
@@ -298,12 +466,22 @@ class StandardizeSpecResponse(BaseModel):
     errors: list[str]
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecWithEvidenceOptions 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecWithEvidenceOptions(StandardizeSpecOptions):
     docs_dir: str = "data/standard_docs"
     top_k: int = 5
     max_snippet_chars: int = 280
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecWithEvidenceRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecWithEvidenceRequest(BaseModel):
     object: StandardizeSpecObject
     sql: str
@@ -312,6 +490,11 @@ class StandardizeSpecWithEvidenceRequest(BaseModel):
     )
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecEvidenceDocument Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecEvidenceDocument(BaseModel):
     doc_id: str
     title: str
@@ -320,18 +503,33 @@ class StandardizeSpecEvidenceDocument(BaseModel):
     snippet: str
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecPatternRecommendation Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecPatternRecommendation(BaseModel):
     id: str
     message: str
     source_doc_id: str | None
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecWithEvidencePayload Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecWithEvidencePayload(BaseModel):
     query_terms: list[str]
     documents: list[StandardizeSpecEvidenceDocument]
     pattern_recommendations: list[StandardizeSpecPatternRecommendation]
 
 
+# [클래스 설명]
+# - 역할: StandardizeSpecWithEvidenceResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecWithEvidenceResponse(BaseModel):
     version: str
     object: StandardizeSpecObjectResponse
@@ -340,18 +538,33 @@ class StandardizeSpecWithEvidenceResponse(BaseModel):
     errors: list[str]
 
 
+# [클래스 설명]
+# - 역할: CallersOptions Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallersOptions(BaseModel):
     case_insensitive: bool = True
     schema_sensitive: bool = False
     include_self: bool = False
 
 
+# [클래스 설명]
+# - 역할: CallersObject Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallersObject(BaseModel):
     name: str
     type: str
     sql: str
 
 
+# [클래스 설명]
+# - 역할: CallersRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallersRequest(BaseModel):
     target: str
     target_type: str | None = None
@@ -359,18 +572,33 @@ class CallersRequest(BaseModel):
     options: CallersOptions = Field(default_factory=CallersOptions)
 
 
+# [클래스 설명]
+# - 역할: CallersTarget Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallersTarget(BaseModel):
     name: str
     type: str
     normalized: str
 
 
+# [클래스 설명]
+# - 역할: CallersSummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallersSummary(BaseModel):
     has_callers: bool
     caller_count: int
     total_calls: int
 
 
+# [클래스 설명]
+# - 역할: CallerResult Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallerResult(BaseModel):
     name: str
     type: str
@@ -379,6 +607,11 @@ class CallerResult(BaseModel):
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: CallersResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallersResponse(BaseModel):
     version: str
     target: CallersTarget
@@ -387,11 +620,21 @@ class CallersResponse(BaseModel):
     errors: list[str]
 
 
+# [클래스 설명]
+# - 역할: ExternalDepsOptions Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ExternalDepsOptions(BaseModel):
     case_insensitive: bool = True
     max_items: int = Field(200, ge=1)
 
 
+# [클래스 설명]
+# - 역할: ExternalDepsRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ExternalDepsRequest(BaseModel):
     name: str
     type: str
@@ -399,11 +642,21 @@ class ExternalDepsRequest(BaseModel):
     options: ExternalDepsOptions = Field(default_factory=ExternalDepsOptions)
 
 
+# [클래스 설명]
+# - 역할: ExternalDepsObject Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ExternalDepsObject(BaseModel):
     name: str
     type: str
 
 
+# [클래스 설명]
+# - 역할: ExternalDepsSummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ExternalDepsSummary(BaseModel):
     has_external_deps: bool
     linked_server_count: int
@@ -413,11 +666,21 @@ class ExternalDepsSummary(BaseModel):
     opendatasource_count: int
 
 
+# [클래스 설명]
+# - 역할: LinkedServerItem Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class LinkedServerItem(BaseModel):
     name: str
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: CrossDatabaseItem Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CrossDatabaseItem(BaseModel):
     database: str
     schema_: str = Field(..., alias="schema")
@@ -425,18 +688,33 @@ class CrossDatabaseItem(BaseModel):
     kind: str
 
 
+# [클래스 설명]
+# - 역할: TargetDependencyItem Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class TargetDependencyItem(BaseModel):
     target: str
     kind: str
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: OtherDependencyItem Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class OtherDependencyItem(BaseModel):
     id: str
     kind: str
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: ExternalDependencies Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ExternalDependencies(BaseModel):
     linked_servers: list[LinkedServerItem]
     cross_database: list[CrossDatabaseItem]
@@ -446,6 +724,11 @@ class ExternalDependencies(BaseModel):
     others: list[OtherDependencyItem]
 
 
+# [클래스 설명]
+# - 역할: ExternalDepsResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ExternalDepsResponse(BaseModel):
     version: str
     object: ExternalDepsObject
@@ -455,10 +738,20 @@ class ExternalDepsResponse(BaseModel):
     errors: list[str]
 
 
+# [클래스 설명]
+# - 역할: ReusabilityOptions Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ReusabilityOptions(BaseModel):
     max_reason_items: int = Field(20, ge=1)
 
 
+# [클래스 설명]
+# - 역할: ReusabilityRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ReusabilityRequest(BaseModel):
     name: str
     type: str
@@ -466,11 +759,21 @@ class ReusabilityRequest(BaseModel):
     options: ReusabilityOptions = Field(default_factory=ReusabilityOptions)
 
 
+# [클래스 설명]
+# - 역할: ReusabilityObject Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ReusabilityObject(BaseModel):
     name: str
     type: str
 
 
+# [클래스 설명]
+# - 역할: ReusabilitySummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ReusabilitySummary(BaseModel):
     score: int
     grade: str
@@ -478,6 +781,11 @@ class ReusabilitySummary(BaseModel):
     candidate_type: str | None
 
 
+# [클래스 설명]
+# - 역할: ReusabilitySignals Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ReusabilitySignals(BaseModel):
     read_only: bool
     has_writes: bool
@@ -492,6 +800,11 @@ class ReusabilitySignals(BaseModel):
     error_signaling: list[str]
 
 
+# [클래스 설명]
+# - 역할: ReusabilityReason Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ReusabilityReason(BaseModel):
     id: str
     impact: str
@@ -499,11 +812,21 @@ class ReusabilityReason(BaseModel):
     message: str
 
 
+# [클래스 설명]
+# - 역할: ReusabilityRecommendation Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ReusabilityRecommendation(BaseModel):
     id: str
     message: str
 
 
+# [클래스 설명]
+# - 역할: ReusabilityResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ReusabilityResponse(BaseModel):
     version: str
     object: ReusabilityObject
@@ -514,6 +837,11 @@ class ReusabilityResponse(BaseModel):
     errors: list[str]
 
 
+# [클래스 설명]
+# - 역할: BusinessRulesOptions Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class BusinessRulesOptions(BaseModel):
     dialect: str = "tsql"
     case_insensitive: bool = True
@@ -521,6 +849,11 @@ class BusinessRulesOptions(BaseModel):
     max_templates: int = Field(150, ge=1)
 
 
+# [클래스 설명]
+# - 역할: BusinessRulesRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class BusinessRulesRequest(BaseModel):
     name: str
     type: str
@@ -528,11 +861,21 @@ class BusinessRulesRequest(BaseModel):
     options: BusinessRulesOptions = Field(default_factory=BusinessRulesOptions)
 
 
+# [클래스 설명]
+# - 역할: BusinessRulesObject Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class BusinessRulesObject(BaseModel):
     name: str
     type: str
 
 
+# [클래스 설명]
+# - 역할: BusinessRulesSummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class BusinessRulesSummary(BaseModel):
     has_rules: bool
     rule_count: int
@@ -540,6 +883,11 @@ class BusinessRulesSummary(BaseModel):
     truncated: bool
 
 
+# [클래스 설명]
+# - 역할: BusinessRule Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class BusinessRule(BaseModel):
     id: str
     kind: str
@@ -549,6 +897,11 @@ class BusinessRule(BaseModel):
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: BusinessRuleTemplateSuggestion Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class BusinessRuleTemplateSuggestion(BaseModel):
     rule_id: str
     template_id: str
@@ -556,6 +909,11 @@ class BusinessRuleTemplateSuggestion(BaseModel):
     rationale: str
 
 
+# [클래스 설명]
+# - 역할: BusinessRulesResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class BusinessRulesResponse(BaseModel):
     version: str
     object: BusinessRulesObject
@@ -566,6 +924,11 @@ class BusinessRulesResponse(BaseModel):
     errors: list[str]
 
 
+# [클래스 설명]
+# - 역할: CallGraphOptions Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallGraphOptions(BaseModel):
     case_insensitive: bool = True
     schema_sensitive: bool = False
@@ -576,17 +939,32 @@ class CallGraphOptions(BaseModel):
     max_edges: int = Field(2000, ge=1)
 
 
+# [클래스 설명]
+# - 역할: CallGraphObject Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallGraphObject(BaseModel):
     name: str
     type: str
     sql: str
 
 
+# [클래스 설명]
+# - 역할: CallGraphRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallGraphRequest(BaseModel):
     objects: list[CallGraphObject]
     options: CallGraphOptions = Field(default_factory=CallGraphOptions)
 
 
+# [클래스 설명]
+# - 역할: CallGraphSummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallGraphSummary(BaseModel):
     object_count: int
     node_count: int
@@ -595,12 +973,22 @@ class CallGraphSummary(BaseModel):
     truncated: bool
 
 
+# [클래스 설명]
+# - 역할: CallGraphNode Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallGraphNode(BaseModel):
     id: str
     name: str
     type: str
 
 
+# [클래스 설명]
+# - 역할: CallGraphEdge Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallGraphEdge(BaseModel):
     from_: str = Field(..., alias="from")
     to: str
@@ -609,11 +997,21 @@ class CallGraphEdge(BaseModel):
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: CallGraph Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallGraph(BaseModel):
     nodes: list[CallGraphNode]
     edges: list[CallGraphEdge]
 
 
+# [클래스 설명]
+# - 역할: CallGraphTopology Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallGraphTopology(BaseModel):
     roots: list[str]
     leaves: list[str]
@@ -621,12 +1019,22 @@ class CallGraphTopology(BaseModel):
     out_degree: dict[str, int]
 
 
+# [클래스 설명]
+# - 역할: CallGraphError Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallGraphError(BaseModel):
     id: str
     message: str
     object: str | None = None
 
 
+# [클래스 설명]
+# - 역할: CallGraphResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class CallGraphResponse(BaseModel):
     version: str
     summary: CallGraphSummary
@@ -635,6 +1043,11 @@ class CallGraphResponse(BaseModel):
     errors: list[CallGraphError]
 
 
+# [클래스 설명]
+# - 역할: MappingStrategyOptions Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MappingStrategyOptions(BaseModel):
     dialect: str = "tsql"
     case_insensitive: bool = True
@@ -642,6 +1055,11 @@ class MappingStrategyOptions(BaseModel):
     max_items: int = Field(30, ge=1)
 
 
+# [클래스 설명]
+# - 역할: MappingStrategyRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MappingStrategyRequest(BaseModel):
     name: str
     type: str
@@ -649,11 +1067,21 @@ class MappingStrategyRequest(BaseModel):
     options: MappingStrategyOptions = Field(default_factory=MappingStrategyOptions)
 
 
+# [클래스 설명]
+# - 역할: MappingStrategyObject Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MappingStrategyObject(BaseModel):
     name: str
     type: str
 
 
+# [클래스 설명]
+# - 역할: MappingStrategySummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MappingStrategySummary(BaseModel):
     approach: str
     confidence: float
@@ -661,6 +1089,11 @@ class MappingStrategySummary(BaseModel):
     is_recommended: bool
 
 
+# [클래스 설명]
+# - 역할: MappingStrategySignals Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MappingStrategySignals(BaseModel):
     read_only: bool
     has_writes: bool
@@ -678,17 +1111,32 @@ class MappingStrategySignals(BaseModel):
     error_signaling: list[str]
 
 
+# [클래스 설명]
+# - 역할: StrategyPattern Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StrategyPattern(BaseModel):
     id: str
     message: str
 
 
+# [클래스 설명]
+# - 역할: MappingStrategyPlan Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MappingStrategyPlan(BaseModel):
     migration_path: list[str]
     recommended_patterns: list[StrategyPattern]
     anti_patterns: list[StrategyPattern]
 
 
+# [클래스 설명]
+# - 역할: MapperMethod Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MapperMethod(BaseModel):
     name: str
     kind: str
@@ -696,44 +1144,84 @@ class MapperMethod(BaseModel):
     return_style: str
 
 
+# [클래스 설명]
+# - 역할: XmlTemplate Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class XmlTemplate(BaseModel):
     statement_tag: str
     skeleton: str
     dynamic_tags: list[str]
 
 
+# [클래스 설명]
+# - 역할: MyBatisMapping Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MyBatisMapping(BaseModel):
     mapper_method: MapperMethod
     xml_template: XmlTemplate
 
 
+# [클래스 설명]
+# - 역할: ServicePattern Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class ServicePattern(BaseModel):
     transactional: bool
     exception_mapping: str
 
 
+# [클래스 설명]
+# - 역할: DtoSuggestion Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DtoSuggestion(BaseModel):
     id: str
     fields: list[str]
     notes: str
 
 
+# [클래스 설명]
+# - 역할: JavaMapping Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class JavaMapping(BaseModel):
     service_pattern: ServicePattern
     dto_suggestions: list[DtoSuggestion]
 
 
+# [클래스 설명]
+# - 역할: MappingStrategyReason Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MappingStrategyReason(BaseModel):
     id: str
     weight: int
     message: str
 
 
+# [클래스 설명]
+# - 역할: MappingStrategyRecommendation Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MappingStrategyRecommendation(BaseModel):
     id: str
     message: str
 
 
+# [클래스 설명]
+# - 역할: MappingStrategyResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MappingStrategyResponse(BaseModel):
     version: str
     object: MappingStrategyObject
@@ -747,6 +1235,11 @@ class MappingStrategyResponse(BaseModel):
     errors: list[str]
 
 
+# [클래스 설명]
+# - 역할: TxBoundaryOptions Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class TxBoundaryOptions(BaseModel):
     dialect: str = "tsql"
     case_insensitive: bool = True
@@ -754,6 +1247,11 @@ class TxBoundaryOptions(BaseModel):
     max_items: int = Field(30, ge=1)
 
 
+# [클래스 설명]
+# - 역할: TxBoundaryRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class TxBoundaryRequest(BaseModel):
     name: str
     type: str
@@ -761,11 +1259,21 @@ class TxBoundaryRequest(BaseModel):
     options: TxBoundaryOptions = Field(default_factory=TxBoundaryOptions)
 
 
+# [클래스 설명]
+# - 역할: TxBoundaryObject Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class TxBoundaryObject(BaseModel):
     name: str
     type: str
 
 
+# [클래스 설명]
+# - 역할: TxBoundarySummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class TxBoundarySummary(BaseModel):
     recommended_boundary: str
     transactional: bool
@@ -775,6 +1283,11 @@ class TxBoundarySummary(BaseModel):
     confidence: float
 
 
+# [클래스 설명]
+# - 역할: TxBoundarySignals Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class TxBoundarySignals(BaseModel):
     has_writes: bool
     write_ops: list[str]
@@ -792,16 +1305,31 @@ class TxBoundarySignals(BaseModel):
     error_signaling: list[str]
 
 
+# [클래스 설명]
+# - 역할: TxBoundaryItem Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class TxBoundaryItem(BaseModel):
     id: str
     message: str
 
 
+# [클래스 설명]
+# - 역할: TxBoundarySnippets Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class TxBoundarySnippets(BaseModel):
     annotation_example: str
     notes: list[str]
 
 
+# [클래스 설명]
+# - 역할: TxBoundaryResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class TxBoundaryResponse(BaseModel):
     version: str
     object: TxBoundaryObject
@@ -813,12 +1341,22 @@ class TxBoundaryResponse(BaseModel):
     errors: list[str]
 
 
+# [클래스 설명]
+# - 역할: MyBatisDifficultyOptions Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MyBatisDifficultyOptions(BaseModel):
     dialect: str = "tsql"
     case_insensitive: bool = True
     max_reason_items: int = 25
 
 
+# [클래스 설명]
+# - 역할: MyBatisDifficultyRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MyBatisDifficultyRequest(BaseModel):
     name: str
     type: str
@@ -826,11 +1364,21 @@ class MyBatisDifficultyRequest(BaseModel):
     options: MyBatisDifficultyOptions = Field(default_factory=MyBatisDifficultyOptions)
 
 
+# [클래스 설명]
+# - 역할: MyBatisDifficultyObject Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MyBatisDifficultyObject(BaseModel):
     name: str
     type: str
 
 
+# [클래스 설명]
+# - 역할: MyBatisDifficultySummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MyBatisDifficultySummary(BaseModel):
     difficulty_score: int
     difficulty_level: str
@@ -840,6 +1388,11 @@ class MyBatisDifficultySummary(BaseModel):
     truncated: bool
 
 
+# [클래스 설명]
+# - 역할: MyBatisDifficultySignals Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MyBatisDifficultySignals(BaseModel):
     table_count: int
     function_call_count: int
@@ -857,17 +1410,32 @@ class MyBatisDifficultySignals(BaseModel):
     cyclomatic_complexity: int
 
 
+# [클래스 설명]
+# - 역할: MyBatisDifficultyFactor Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MyBatisDifficultyFactor(BaseModel):
     id: str
     points: int
     message: str
 
 
+# [클래스 설명]
+# - 역할: MyBatisDifficultyRecommendation Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MyBatisDifficultyRecommendation(BaseModel):
     id: str
     message: str
 
 
+# [클래스 설명]
+# - 역할: MyBatisDifficultyResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class MyBatisDifficultyResponse(BaseModel):
     version: str
     object: MyBatisDifficultyObject
@@ -878,12 +1446,22 @@ class MyBatisDifficultyResponse(BaseModel):
     errors: list[str]
 
 
+# [클래스 설명]
+# - 역할: PerformanceRiskOptions Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class PerformanceRiskOptions(BaseModel):
     dialect: str = "tsql"
     case_insensitive: bool = True
     max_findings: int = 50
 
 
+# [클래스 설명]
+# - 역할: PerformanceRiskRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class PerformanceRiskRequest(BaseModel):
     name: str
     type: str
@@ -891,11 +1469,21 @@ class PerformanceRiskRequest(BaseModel):
     options: PerformanceRiskOptions = Field(default_factory=PerformanceRiskOptions)
 
 
+# [클래스 설명]
+# - 역할: PerformanceRiskObject Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class PerformanceRiskObject(BaseModel):
     name: str
     type: str
 
 
+# [클래스 설명]
+# - 역할: PerformanceRiskSummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class PerformanceRiskSummary(BaseModel):
     risk_score: int
     risk_level: str
@@ -903,6 +1491,11 @@ class PerformanceRiskSummary(BaseModel):
     truncated: bool
 
 
+# [클래스 설명]
+# - 역할: PerformanceRiskSignals Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class PerformanceRiskSignals(BaseModel):
     table_count: int
     has_writes: bool
@@ -912,6 +1505,11 @@ class PerformanceRiskSignals(BaseModel):
     has_dynamic_sql: bool
 
 
+# [클래스 설명]
+# - 역할: PerformanceRiskFinding Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class PerformanceRiskFinding(BaseModel):
     id: str
     severity: str
@@ -920,11 +1518,21 @@ class PerformanceRiskFinding(BaseModel):
     recommendation: str
 
 
+# [클래스 설명]
+# - 역할: PerformanceRiskRecommendation Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class PerformanceRiskRecommendation(BaseModel):
     id: str
     message: str
 
 
+# [클래스 설명]
+# - 역할: PerformanceRiskResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class PerformanceRiskResponse(BaseModel):
     version: str
     object: PerformanceRiskObject
@@ -935,6 +1543,11 @@ class PerformanceRiskResponse(BaseModel):
     errors: list[str]
 
 
+# [클래스 설명]
+# - 역할: DbDependencyOptions Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyOptions(BaseModel):
     dialect: str = "tsql"
     case_insensitive: bool = True
@@ -942,6 +1555,11 @@ class DbDependencyOptions(BaseModel):
     max_items: int = 200
 
 
+# [클래스 설명]
+# - 역할: DbDependencyRequest Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyRequest(BaseModel):
     name: str
     type: str
@@ -949,17 +1567,32 @@ class DbDependencyRequest(BaseModel):
     options: DbDependencyOptions = Field(default_factory=DbDependencyOptions)
 
 
+# [클래스 설명]
+# - 역할: DbDependencyObject Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyObject(BaseModel):
     name: str
     type: str
 
 
+# [클래스 설명]
+# - 역할: DbDependencySummary Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencySummary(BaseModel):
     dependency_score: int
     dependency_level: str
     truncated: bool
 
 
+# [클래스 설명]
+# - 역할: DbDependencyMetrics Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyMetrics(BaseModel):
     table_count: int
     function_call_count: int
@@ -974,6 +1607,11 @@ class DbDependencyMetrics(BaseModel):
     tempdb_pressure_signals: int
 
 
+# [클래스 설명]
+# - 역할: DbDependencyCrossDatabaseItem Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyCrossDatabaseItem(BaseModel):
     database: str
     schema_: str = Field(..., alias="schema")
@@ -982,32 +1620,62 @@ class DbDependencyCrossDatabaseItem(BaseModel):
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: DbDependencyLinkedServerItem Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyLinkedServerItem(BaseModel):
     name: str
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: DbDependencyRemoteExecItem Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyRemoteExecItem(BaseModel):
     target: str
     kind: str
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: DbDependencyExternalAccessItem Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyExternalAccessItem(BaseModel):
     id: str
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: DbDependencySystemObjectItem Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencySystemObjectItem(BaseModel):
     id: str
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: DbDependencyTempdbSignalItem Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyTempdbSignalItem(BaseModel):
     id: str
     signals: list[str]
 
 
+# [클래스 설명]
+# - 역할: DbDependencyDependencies Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyDependencies(BaseModel):
     cross_database: list[DbDependencyCrossDatabaseItem]
     linked_servers: list[DbDependencyLinkedServerItem]
@@ -1017,17 +1685,32 @@ class DbDependencyDependencies(BaseModel):
     tempdb_signals: list[DbDependencyTempdbSignalItem]
 
 
+# [클래스 설명]
+# - 역할: DbDependencyReason Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyReason(BaseModel):
     id: str
     weight: int
     message: str
 
 
+# [클래스 설명]
+# - 역할: DbDependencyRecommendation Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyRecommendation(BaseModel):
     id: str
     message: str
 
 
+# [클래스 설명]
+# - 역할: DbDependencyResponse Pydantic 스키마 모델을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class DbDependencyResponse(BaseModel):
     version: str
     object: DbDependencyObject
@@ -1039,6 +1722,13 @@ class DbDependencyResponse(BaseModel):
     errors: list[str]
 
 
+# [함수 설명]
+# - 목적: /analyze 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, references, transactions, migration_impacts, control_flow, data_changes, error_handling, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     result = analyze_references(request.sql, request.dialect)
@@ -1060,6 +1750,13 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     )
 
 
+# [함수 설명]
+# - 목적: /standardize/spec 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, object, spec, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/standardize/spec", response_model=StandardizeSpecResponse)
 def standardize_spec(request: StandardizeSpecRequest) -> StandardizeSpecResponse:
     options = ServiceStandardizationOptions(
@@ -1078,6 +1775,13 @@ def standardize_spec(request: StandardizeSpecRequest) -> StandardizeSpecResponse
     return StandardizeSpecResponse(**result)
 
 
+# [함수 설명]
+# - 목적: /standardize/spec-with-evidence 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, object, spec, evidence, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/standardize/spec-with-evidence", response_model=StandardizeSpecWithEvidenceResponse)
 def standardize_spec_with_evidence(
     request: StandardizeSpecWithEvidenceRequest,
@@ -1176,6 +1880,13 @@ def standardize_spec_with_evidence(
     )
 
 
+# [함수 설명]
+# - 목적: /callers 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, target, summary, callers, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/callers", response_model=CallersResponse)
 def callers(request: CallersRequest) -> CallersResponse:
     target_type = _infer_target_type(request.target, request.target_type)
@@ -1191,6 +1902,13 @@ def callers(request: CallersRequest) -> CallersResponse:
     return CallersResponse(**result)
 
 
+# [함수 설명]
+# - 목적: /external-deps 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, object, summary, external_dependencies, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/external-deps", response_model=ExternalDepsResponse)
 def external_deps(request: ExternalDepsRequest) -> ExternalDepsResponse:
     result = analyze_external_dependencies(
@@ -1205,6 +1923,13 @@ def external_deps(request: ExternalDepsRequest) -> ExternalDepsResponse:
     return ExternalDepsResponse(**result)
 
 
+# [함수 설명]
+# - 목적: /common/reusability 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, object, summary, reasons, recommendations, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/common/reusability", response_model=ReusabilityResponse)
 def common_reusability(request: ReusabilityRequest) -> ReusabilityResponse:
     result = evaluate_reusability(
@@ -1222,6 +1947,13 @@ def common_reusability(request: ReusabilityRequest) -> ReusabilityResponse:
     )
 
 
+# [함수 설명]
+# - 목적: /common/rules-template 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, object, summary, rules, template_suggestions, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/common/rules-template", response_model=BusinessRulesResponse)
 def common_rules_template(request: BusinessRulesRequest) -> BusinessRulesResponse:
     result = analyze_business_rules(
@@ -1244,6 +1976,13 @@ def common_rules_template(request: BusinessRulesRequest) -> BusinessRulesRespons
     )
 
 
+# [함수 설명]
+# - 목적: /common/call-graph 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, summary, graph, topology, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/common/call-graph", response_model=CallGraphResponse)
 def common_call_graph(request: CallGraphRequest) -> CallGraphResponse:
     service_objects = [
@@ -1262,6 +2001,13 @@ def common_call_graph(request: CallGraphRequest) -> CallGraphResponse:
     return CallGraphResponse(**result)
 
 
+# [함수 설명]
+# - 목적: /migration/mapping-strategy 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, object, summary, strategy, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/migration/mapping-strategy", response_model=MappingStrategyResponse)
 def migration_mapping_strategy(request: MappingStrategyRequest) -> MappingStrategyResponse:
     result = recommend_mapping_strategy(
@@ -1300,6 +2046,13 @@ def migration_mapping_strategy(request: MappingStrategyRequest) -> MappingStrate
     )
 
 
+# [함수 설명]
+# - 목적: /migration/mybatis-difficulty 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, object, summary, factors, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/migration/mybatis-difficulty", response_model=MyBatisDifficultyResponse)
 def migration_mybatis_difficulty(
     request: MyBatisDifficultyRequest,
@@ -1324,6 +2077,13 @@ def migration_mybatis_difficulty(
     )
 
 
+# [함수 설명]
+# - 목적: /migration/transaction-boundary 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, object, summary, suggestions, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/migration/transaction-boundary", response_model=TxBoundaryResponse)
 def migration_transaction_boundary(request: TxBoundaryRequest) -> TxBoundaryResponse:
     result = recommend_transaction_boundary(
@@ -1346,6 +2106,13 @@ def migration_transaction_boundary(request: TxBoundaryRequest) -> TxBoundaryResp
     )
 
 
+# [함수 설명]
+# - 목적: /quality/performance-risk 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, object, summary, findings, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/quality/performance-risk", response_model=PerformanceRiskResponse)
 def quality_performance_risk(request: PerformanceRiskRequest) -> PerformanceRiskResponse:
     result = analyze_performance_risk(
@@ -1367,6 +2134,13 @@ def quality_performance_risk(request: PerformanceRiskRequest) -> PerformanceRisk
     )
 
 
+# [함수 설명]
+# - 목적: /quality/db-dependency 엔드포인트 요청을 처리한다.
+# - 입력: 요청 모델과 옵션을 수신하여 분석/추천을 수행한다.
+# - 출력: 응답 모델의 주요 필드는 version, object, summary, metrics, errors이다.
+# - 에러 처리: 서비스 오류는 errors 목록에 기록하고 가능한 결과를 반환한다.
+# - 결정론: 리스트 결과는 정렬/캡 정책을 통해 안정적으로 반환되도록 한다.
+# - 보안: 원문 SQL은 로그에 요약 정보로만 기록한다.
 @router.post("/quality/db-dependency", response_model=DbDependencyResponse)
 def quality_db_dependency(request: DbDependencyRequest) -> DbDependencyResponse:
     result = analyze_db_dependency(
@@ -1412,6 +2186,13 @@ def quality_db_dependency(request: DbDependencyRequest) -> DbDependencyResponse:
     )
 
 
+# [함수 설명]
+# - 목적: _empty_standardize_spec 처리 로직을 수행한다.
+# - 입력: name: str, obj_type: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _empty_standardize_spec(name: str, obj_type: str) -> dict[str, object]:
     return {
         "version": "5.1.0",
@@ -1421,6 +2202,13 @@ def _empty_standardize_spec(name: str, obj_type: str) -> dict[str, object]:
     }
 
 
+# [함수 설명]
+# - 목적: _empty_spec_payload 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _empty_spec_payload() -> dict[str, object]:
     return {
         "tags": [],
@@ -1444,10 +2232,24 @@ def _empty_spec_payload() -> dict[str, object]:
     }
 
 
+# [함수 설명]
+# - 목적: _normalize_object_name 처리 로직을 수행한다.
+# - 입력: name: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_object_name(name: str) -> str:
     return name.replace("[", "").replace("]", "").strip().lower()
 
 
+# [함수 설명]
+# - 목적: _infer_target_type 처리 로직을 수행한다.
+# - 입력: target: str, target_type: str | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _infer_target_type(target: str, target_type: str | None) -> str:
     if target_type:
         return target_type.lower()

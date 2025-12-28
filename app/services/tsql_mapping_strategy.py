@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: T-SQL 분석/추천 로직을 제공하는 서비스 모듈이다.
+# - 제공 기능: 분석 결과 요약, 위험도 평가, 전략 추천 등의 함수를 포함한다.
+# - 입력/출력: SQL 또는 옵션을 입력받아 구조화된 dict 결과를 반환한다.
+# - 주의 사항: 원문 SQL은 요약/해시로만 다루며 직접 노출하지 않는다.
+# - 연관 모듈: app.api.mcp 라우터에서 호출된다.
 from __future__ import annotations
 
 import logging
@@ -16,12 +22,22 @@ from app.services.tsql_analyzer import (
 logger = logging.getLogger(__name__)
 
 
+# [클래스 설명]
+# - 역할: StrategyItem 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class StrategyItem:
     id: str
     message: str
 
 
+# [클래스 설명]
+# - 역할: ReasonItem 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class ReasonItem:
     id: str
@@ -29,6 +45,13 @@ class ReasonItem:
     message: str
 
 
+# [함수 설명]
+# - 목적: recommend_mapping_strategy 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 주요 키는 summary, strategy, reasons, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def recommend_mapping_strategy(
     sql: str,
     obj_type: str,
@@ -212,6 +235,13 @@ def recommend_mapping_strategy(
     }
 
 
+# [함수 설명]
+# - 목적: _choose_approach 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _choose_approach(
     *,
     target_style: str,
@@ -233,6 +263,13 @@ def _choose_approach(
     return approach
 
 
+# [함수 설명]
+# - 목적: _difficulty_level 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _difficulty_level(
     *,
     has_writes: bool,
@@ -259,6 +296,13 @@ def _difficulty_level(
     return levels[min(index, len(levels) - 1)]
 
 
+# [함수 설명]
+# - 목적: _confidence_score 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _confidence_score(
     *,
     approach: str,
@@ -295,6 +339,13 @@ def _confidence_score(
     return max(0.5, min(0.9, base))
 
 
+# [함수 설명]
+# - 목적: _write_kinds 처리 로직을 수행한다.
+# - 입력: operations: dict[str, dict[str, object]]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _write_kinds(operations: dict[str, dict[str, object]]) -> list[str]:
     kinds = []
     for op in ["insert", "update", "delete", "merge", "truncate", "select_into"]:
@@ -303,6 +354,13 @@ def _write_kinds(operations: dict[str, dict[str, object]]) -> list[str]:
     return kinds
 
 
+# [함수 설명]
+# - 목적: _strategy_patterns 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _strategy_patterns(
     *,
     approach: str,
@@ -313,9 +371,23 @@ def _strategy_patterns(
     patterns: list[StrategyItem] = []
     anti_patterns: list[StrategyItem] = []
 
+    # [함수 설명]
+    # - 목적: add_pattern 처리 로직을 수행한다.
+    # - 입력: item_id: str, message: str
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_pattern(item_id: str, message: str) -> None:
         patterns.append(StrategyItem(id=item_id, message=message))
 
+    # [함수 설명]
+    # - 목적: add_anti 처리 로직을 수행한다.
+    # - 입력: item_id: str, message: str
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_anti(item_id: str, message: str) -> None:
         anti_patterns.append(StrategyItem(id=item_id, message=message))
 
@@ -356,6 +428,13 @@ def _strategy_patterns(
     )
 
 
+# [함수 설명]
+# - 목적: _reasons_and_recommendations 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _reasons_and_recommendations(
     *,
     read_only: bool,
@@ -488,6 +567,13 @@ def _reasons_and_recommendations(
     return reasons, recommendations
 
 
+# [함수 설명]
+# - 목적: _mapper_method 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _mapper_method(
     *,
     obj_type: str,
@@ -520,6 +606,13 @@ def _mapper_method(
     }
 
 
+# [함수 설명]
+# - 목적: _xml_template 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _xml_template(
     *,
     approach: str,
@@ -551,12 +644,26 @@ def _xml_template(
     }
 
 
+# [함수 설명]
+# - 목적: _migration_path 처리 로직을 수행한다.
+# - 입력: approach: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _migration_path(approach: str) -> list[str]:
     if approach == "call_sp_first":
         return ["intermediate_state", "target_state"]
     return ["target_state"]
 
 
+# [함수 설명]
+# - 목적: _normalize_strategy_items 처리 로직을 수행한다.
+# - 입력: items: list[StrategyItem]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_strategy_items(items: list[StrategyItem]) -> list[dict[str, str]]:
     by_id: dict[str, StrategyItem] = {}
     for item in items:
@@ -569,6 +676,13 @@ def _normalize_strategy_items(items: list[StrategyItem]) -> list[dict[str, str]]
     ]
 
 
+# [함수 설명]
+# - 목적: _normalize_reasons 처리 로직을 수행한다.
+# - 입력: reasons: list[ReasonItem]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_reasons(reasons: list[ReasonItem]) -> list[dict[str, object]]:
     by_id: dict[str, ReasonItem] = {}
     for reason in reasons:
@@ -582,6 +696,13 @@ def _normalize_reasons(reasons: list[ReasonItem]) -> list[dict[str, object]]:
     ]
 
 
+# [함수 설명]
+# - 목적: _normalize_recommendations 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_recommendations(
     recommendations: list[StrategyItem],
 ) -> list[dict[str, str]]:
@@ -596,6 +717,13 @@ def _normalize_recommendations(
     ]
 
 
+# [함수 설명]
+# - 목적: _apply_max_items 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _apply_max_items(
     reasons: list[dict[str, object]],
     recommendations: list[dict[str, str]],
@@ -616,6 +744,13 @@ def _apply_max_items(
     )
 
 
+# [함수 설명]
+# - 목적: _error_signaling 처리 로직을 수행한다.
+# - 입력: error_handling: dict[str, object]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _error_signaling(error_handling: dict[str, object]) -> list[str]:
     signals: set[str] = set()
     if error_handling.get("uses_throw"):
@@ -631,6 +766,13 @@ def _error_signaling(error_handling: dict[str, object]) -> list[str]:
     return sorted(signals)
 
 
+# [함수 설명]
+# - 목적: _camelize 처리 로직을 수행한다.
+# - 입력: value: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _camelize(value: str) -> str:
     cleaned = value.split(".")[-1]
     if not cleaned:
@@ -646,5 +788,12 @@ def _camelize(value: str) -> str:
     return "".join(part[:1].upper() + part[1:] for part in parts)
 
 
+# [함수 설명]
+# - 목적: _sorted_unique 처리 로직을 수행한다.
+# - 입력: items: list[str]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sorted_unique(items: list[str]) -> list[str]:
     return sorted({item for item in items if item})
