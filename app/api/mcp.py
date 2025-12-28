@@ -35,6 +35,7 @@ from app.services.tsql_callers import (
 from app.services.tsql_external_deps import analyze_external_dependencies
 from app.services.tsql_mapping_strategy import recommend_mapping_strategy
 from app.services.tsql_reusability import evaluate_reusability
+from app.services.tsql_tx_boundary import recommend_transaction_boundary
 
 router = APIRouter()
 
@@ -579,6 +580,72 @@ class MappingStrategyResponse(BaseModel):
     errors: list[str]
 
 
+class TxBoundaryOptions(BaseModel):
+    dialect: str = "tsql"
+    case_insensitive: bool = True
+    prefer_service_layer_tx: bool = True
+    max_items: int = Field(30, ge=1)
+
+
+class TxBoundaryRequest(BaseModel):
+    name: str
+    type: str
+    sql: str
+    options: TxBoundaryOptions = Field(default_factory=TxBoundaryOptions)
+
+
+class TxBoundaryObject(BaseModel):
+    name: str
+    type: str
+
+
+class TxBoundarySummary(BaseModel):
+    recommended_boundary: str
+    transactional: bool
+    propagation: str
+    isolation_level: str | None
+    read_only: bool
+    confidence: float
+
+
+class TxBoundarySignals(BaseModel):
+    has_writes: bool
+    write_ops: list[str]
+    uses_transaction_in_sql: bool
+    begin_count: int
+    commit_count: int
+    rollback_count: int
+    has_try_catch: bool
+    xact_abort: str | None
+    isolation_level_in_sql: str | None
+    has_dynamic_sql: bool
+    has_cursor: bool
+    uses_temp_objects: bool
+    cyclomatic_complexity: int
+    error_signaling: list[str]
+
+
+class TxBoundaryItem(BaseModel):
+    id: str
+    message: str
+
+
+class TxBoundarySnippets(BaseModel):
+    annotation_example: str
+    notes: list[str]
+
+
+class TxBoundaryResponse(BaseModel):
+    version: str
+    object: TxBoundaryObject
+    summary: TxBoundarySummary
+    signals: TxBoundarySignals
+    suggestions: list[TxBoundaryItem]
+    anti_patterns: list[TxBoundaryItem]
+    java_snippets: TxBoundarySnippets
+    errors: list[str]
+
+
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     result = analyze_references(request.sql, request.dialect)
@@ -720,6 +787,28 @@ def migration_mapping_strategy(request: MappingStrategyRequest) -> MappingStrate
         recommendations=[
             MappingStrategyRecommendation(**item) for item in result["recommendations"]
         ],
+        errors=result["errors"],
+    )
+
+
+@router.post("/migration/transaction-boundary", response_model=TxBoundaryResponse)
+def migration_transaction_boundary(request: TxBoundaryRequest) -> TxBoundaryResponse:
+    result = recommend_transaction_boundary(
+        request.sql,
+        request.type,
+        dialect=request.options.dialect,
+        case_insensitive=request.options.case_insensitive,
+        prefer_service_layer_tx=request.options.prefer_service_layer_tx,
+        max_items=request.options.max_items,
+    )
+    return TxBoundaryResponse(
+        version=result["version"],
+        object=TxBoundaryObject(name=request.name, type=request.type),
+        summary=TxBoundarySummary(**result["summary"]),
+        signals=TxBoundarySignals(**result["signals"]),
+        suggestions=[TxBoundaryItem(**item) for item in result["suggestions"]],
+        anti_patterns=[TxBoundaryItem(**item) for item in result["anti_patterns"]],
+        java_snippets=TxBoundarySnippets(**result["java_snippets"]),
         errors=result["errors"],
     )
 
