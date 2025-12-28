@@ -17,6 +17,9 @@ from app.api.mcp import AnalyzeRequest, analyze
 router = APIRouter()
 
 DEFAULT_SUPPORTED_PROTOCOL_VERSIONS = ("2025-03-26", "2025-11-25")
+TOOL_ANALYZE_SQL = "analyze_sql"
+TOOL_HEALTH = "health"
+TOOL_TSQL_ANALYZE = "tsql.analyze"
 
 
 # [함수 설명]
@@ -91,7 +94,7 @@ def _jsonrpc_response(
 def _handle_initialize(_: dict[str, Any]) -> dict[str, Any]:
     return {
         "protocolVersion": "2025-11-25",
-        "capabilities": {"tools": {"listChanged": False}},
+        "capabilities": {"tools": {}},
         "serverInfo": {
             "name": "mssql-migration-mcp-server",
             "version": "0.1.0",
@@ -108,46 +111,84 @@ def _handle_initialize(_: dict[str, Any]) -> dict[str, Any]:
 # - 에러 처리: 예외 없이 고정 목록을 반환한다.
 # - 결정론: 동일 입력에 대해 동일 결과를 반환한다.
 # - 보안: 도구 메타데이터만 노출한다.
-def _handle_tools_list() -> dict[str, Any]:
+def _tool_output_schema() -> dict[str, Any]:
     return {
-        "tools": [
-            {
-                "name": "tsql.analyze",
-                "description": (
-                    "Analyze a T-SQL statement for references, transactions, control flow, "
-                    "data changes, and migration impacts."
-                ),
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "sql": {
-                            "type": "string",
-                            "description": "T-SQL text to analyze.",
-                        },
-                        "dialect": {
-                            "type": "string",
-                            "description": "SQL dialect (default: tsql).",
-                            "default": "tsql",
-                        },
-                    },
-                    "required": ["sql"],
-                },
-                "outputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "version": {"type": "string"},
-                        "references": {"type": "object"},
-                        "transactions": {"type": "object"},
-                        "migration_impacts": {"type": "object"},
-                        "control_flow": {"type": "object"},
-                        "data_changes": {"type": "object"},
-                        "error_handling": {"type": "object"},
-                        "errors": {"type": "array", "items": {"type": "string"}},
-                    },
-                },
-            }
-        ]
+        "type": "object",
+        "properties": {
+            "version": {"type": "string"},
+            "references": {"type": "object"},
+            "transactions": {"type": "object"},
+            "migration_impacts": {"type": "object"},
+            "control_flow": {"type": "object"},
+            "data_changes": {"type": "object"},
+            "error_handling": {"type": "object"},
+            "errors": {"type": "array", "items": {"type": "string"}},
+        },
     }
+
+
+def _tool_registry() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": TOOL_ANALYZE_SQL,
+            "description": (
+                "Analyze a T-SQL statement for references, transactions, control flow, "
+                "data changes, and migration impacts."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "sql": {
+                        "type": "string",
+                        "description": "T-SQL text to analyze.",
+                    },
+                    "dialect": {
+                        "type": "string",
+                        "description": "SQL dialect (default: tsql).",
+                        "default": "tsql",
+                    },
+                },
+                "required": ["sql"],
+            },
+            "outputSchema": _tool_output_schema(),
+        },
+        {
+            "name": TOOL_TSQL_ANALYZE,
+            "description": (
+                "Legacy alias for analyze_sql (kept for compatibility with existing clients)."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "sql": {
+                        "type": "string",
+                        "description": "T-SQL text to analyze.",
+                    },
+                    "dialect": {
+                        "type": "string",
+                        "description": "SQL dialect (default: tsql).",
+                        "default": "tsql",
+                    },
+                },
+                "required": ["sql"],
+            },
+            "outputSchema": _tool_output_schema(),
+        },
+        {
+            "name": TOOL_HEALTH,
+            "description": "Return basic service health information.",
+            "inputSchema": {"type": "object", "properties": {}},
+            "outputSchema": {
+                "type": "object",
+                "properties": {"status": {"type": "string"}},
+                "required": ["status"],
+            },
+        },
+    ]
+
+
+def _handle_tools_list() -> dict[str, Any]:
+    return {"tools": _tool_registry()}
 
 
 # [함수 설명]
@@ -182,25 +223,28 @@ def _handle_tools_call(params: dict[str, Any]) -> dict[str, Any]:
     arguments = params.get("arguments")
     if not name:
         return _build_tool_result("Tool name is required.", None, is_error=True)
-    if name != "tsql.analyze":
-        return _build_tool_result(f"Unknown tool: {name}.", None, is_error=True)
-    if not isinstance(arguments, dict):
-        return _build_tool_result("Tool arguments must be an object.", None, is_error=True)
-    try:
-        request_model = AnalyzeRequest(**arguments)
-        result = analyze(request_model)
-        payload = result.model_dump()
-        references = payload.get("references", {})
-        tables = references.get("tables", [])
-        functions = references.get("functions", [])
-        errors = payload.get("errors", [])
-        summary = (
-            "Analysis complete. "
-            f"tables={len(tables)}, functions={len(functions)}, errors={len(errors)}."
-        )
-        return _build_tool_result(summary, payload, is_error=False)
-    except Exception as exc:  # noqa: BLE001 - tool errors returned via isError
-        return _build_tool_result(f"Tool execution failed: {exc}.", None, is_error=True)
+    if name == TOOL_HEALTH:
+        summary = "Service health check completed."
+        return _build_tool_result(summary, {"status": "ok"}, is_error=False)
+    if name in {TOOL_ANALYZE_SQL, TOOL_TSQL_ANALYZE}:
+        if not isinstance(arguments, dict):
+            return _build_tool_result("Tool arguments must be an object.", None, is_error=True)
+        try:
+            request_model = AnalyzeRequest(**arguments)
+            result = analyze(request_model)
+            payload = result.model_dump()
+            references = payload.get("references", {})
+            tables = references.get("tables", [])
+            functions = references.get("functions", [])
+            errors = payload.get("errors", [])
+            summary = (
+                "Analysis complete. "
+                f"tables={len(tables)}, functions={len(functions)}, errors={len(errors)}."
+            )
+            return _build_tool_result(summary, payload, is_error=False)
+        except Exception as exc:  # noqa: BLE001 - tool errors returned via isError
+            return _build_tool_result(f"Tool execution failed: {exc}.", None, is_error=True)
+    return _build_tool_result(f"Unknown tool: {name}.", None, is_error=True)
 
 
 # [함수 설명]
