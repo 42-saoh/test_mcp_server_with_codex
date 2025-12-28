@@ -1,13 +1,21 @@
+// {
+//   "mcpServers": {
+//     "mssql-migration-assistant": {
+//       "command": "python",
+//       "args": ["-m", "mssql_migration_mcp.server"],
+//       "env": {
+//         "MSSQL_CONN_STR": "Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=YOURDB;Trusted_Connection=yes;TrustServerCertificate=yes;",
+//         "RAG_DB_PATH": ".rag",
+//         "RAG_EMBED_MODEL": "BAAI/bge-small-en-v1.5"
+//       }
+//     }
+//   }
+// }
 {
-  "mcpServers": {
-    "mssql-migration-assistant": {
-      "command": "python",
-      "args": ["-m", "mssql_migration_mcp.server"],
-      "env": {
-        "MSSQL_CONN_STR": "Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=YOURDB;Trusted_Connection=yes;TrustServerCertificate=yes;",
-        "RAG_DB_PATH": ".rag",
-        "RAG_EMBED_MODEL": "BAAI/bge-small-en-v1.5"
-      }
+  "servers": {
+    "mssql-migration-mcp": {
+      "type": "http",
+      "url": "http://localhost:9700/mcp"
     }
   }
 }
