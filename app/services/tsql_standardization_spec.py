@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: T-SQL 분석/추천 로직을 제공하는 서비스 모듈이다.
+# - 제공 기능: 분석 결과 요약, 위험도 평가, 전략 추천 등의 함수를 포함한다.
+# - 입력/출력: SQL 또는 옵션을 입력받아 구조화된 dict 결과를 반환한다.
+# - 주의 사항: 원문 SQL은 요약/해시로만 다루며 직접 노출하지 않는다.
+# - 연관 모듈: app.api.mcp 라우터에서 호출된다.
 from __future__ import annotations
 
 import logging
@@ -11,6 +17,13 @@ from app.services.safe_sql import summarize_sql
 logger = logging.getLogger(__name__)
 
 
+# [함수 설명]
+# - 목적: _load_module 처리 로직을 수행한다.
+# - 입력: module_name: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _load_module(module_name: str) -> Any | None:
     if find_spec(module_name) is None:
         return None
@@ -26,6 +39,11 @@ _PERF_RISK_MODULE = _load_module("app.services.tsql_performance_risk")
 _DB_DEP_MODULE = _load_module("app.services.tsql_db_dependency")
 
 
+# [클래스 설명]
+# - 역할: Options 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class Options:
     dialect: str = "tsql"
@@ -50,6 +68,13 @@ ALL_SECTIONS = [
 ]
 
 
+# [함수 설명]
+# - 목적: build_standardization_spec 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 주요 키는 object, spec, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def build_standardization_spec(
     name: str,
     obj_type: str,
@@ -375,6 +400,13 @@ def build_standardization_spec(
     }
 
 
+# [함수 설명]
+# - 목적: _normalize_sections 처리 로직을 수행한다.
+# - 입력: sections: list[str] | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_sections(sections: list[str] | None) -> list[str]:
     if not sections:
         return ALL_SECTIONS[:]
@@ -382,12 +414,26 @@ def _normalize_sections(sections: list[str] | None) -> list[str]:
     return _sorted_unique(normalized)
 
 
+# [함수 설명]
+# - 목적: _extract_input 처리 로직을 수행한다.
+# - 입력: inputs: dict[str, Any] | None, key: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _extract_input(inputs: dict[str, Any] | None, key: str) -> dict[str, Any] | None:
     if not inputs:
         return None
     return inputs.get(key)
 
 
+# [함수 설명]
+# - 목적: _unwrap_section 처리 로직을 수행한다.
+# - 입력: payload: dict[str, Any] | None, key: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _unwrap_section(payload: dict[str, Any] | None, key: str) -> dict[str, Any] | None:
     if not payload:
         return None
@@ -396,6 +442,13 @@ def _unwrap_section(payload: dict[str, Any] | None, key: str) -> dict[str, Any] 
     return payload
 
 
+# [함수 설명]
+# - 목적: _extend_errors 처리 로직을 수행한다.
+# - 입력: errors: list[str], payload: dict[str, Any] | None, key: str = "errors"
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _extend_errors(errors: list[str], payload: dict[str, Any] | None, key: str = "errors") -> None:
     if not payload:
         return
@@ -404,6 +457,13 @@ def _extend_errors(errors: list[str], payload: dict[str, Any] | None, key: str =
         errors.extend(payload_errors)
 
 
+# [함수 설명]
+# - 목적: _resolve_section 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _resolve_section(
     section: str,
     include_sections: list[str],
@@ -420,6 +480,13 @@ def _resolve_section(
     return None
 
 
+# [함수 설명]
+# - 목적: _call_analyzer 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _call_analyzer(
     sql: str | None, name: str, args: list[Any] | None = None
 ) -> dict[str, Any] | None:
@@ -431,6 +498,13 @@ def _call_analyzer(
     return func(sql, *(args or []))
 
 
+# [함수 설명]
+# - 목적: _call_module_function 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _call_module_function(
     sql: str | None,
     module: Any | None,
@@ -445,6 +519,13 @@ def _call_module_function(
     return func(sql, *args)
 
 
+# [함수 설명]
+# - 목적: _safe_get 처리 로직을 수행한다.
+# - 입력: payload: dict[str, Any] | None, path: list[str], default: Any = None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _safe_get(payload: dict[str, Any] | None, path: list[str], default: Any = None) -> Any:
     if not payload:
         return default
@@ -458,6 +539,13 @@ def _safe_get(payload: dict[str, Any] | None, path: list[str], default: Any = No
     return current
 
 
+# [함수 설명]
+# - 목적: _safe_list 처리 로직을 수행한다.
+# - 입력: payload: dict[str, Any] | None, key: str | None = None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _safe_list(payload: dict[str, Any] | None, key: str | None = None) -> list[dict[str, Any]]:
     if not payload:
         return []
@@ -468,6 +556,13 @@ def _safe_list(payload: dict[str, Any] | None, key: str | None = None) -> list[d
     return items if isinstance(items, list) else []
 
 
+# [함수 설명]
+# - 목적: _build_templates 처리 로직을 수행한다.
+# - 입력: business_rules: dict[str, Any] | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_templates(business_rules: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not business_rules:
         return []
@@ -483,6 +578,13 @@ def _build_templates(business_rules: dict[str, Any] | None) -> list[dict[str, An
     return templates
 
 
+# [함수 설명]
+# - 목적: _build_rules 처리 로직을 수행한다.
+# - 입력: business_rules: dict[str, Any] | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_rules(business_rules: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not business_rules:
         return []
@@ -503,6 +605,13 @@ def _build_rules(business_rules: dict[str, Any] | None) -> list[dict[str, Any]]:
     return rules
 
 
+# [함수 설명]
+# - 목적: _build_recommendations 처리 로직을 수행한다.
+# - 입력: *sources: dict[str, Any] | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_recommendations(*sources: dict[str, Any] | None) -> list[dict[str, Any]]:
     recommendations: dict[str, dict[str, Any]] = {}
     for source in sources:
@@ -514,6 +623,13 @@ def _build_recommendations(*sources: dict[str, Any] | None) -> list[dict[str, An
     return list(recommendations.values())
 
 
+# [함수 설명]
+# - 목적: _transaction_spec 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _transaction_spec(
     transactions: dict[str, Any] | None, tx_boundary: dict[str, Any] | None
 ) -> dict[str, Any]:
@@ -538,6 +654,13 @@ def _transaction_spec(
     }
 
 
+# [함수 설명]
+# - 목적: _difficulty_level 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _difficulty_level(
     mapping_strategy: dict[str, Any] | None, difficulty: dict[str, Any] | None
 ) -> str:
@@ -549,6 +672,13 @@ def _difficulty_level(
     return mapping_level or "unknown"
 
 
+# [함수 설명]
+# - 목적: _build_tags 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_tags(
     *,
     has_writes: bool,
@@ -591,6 +721,13 @@ def _build_tags(
     return tags
 
 
+# [함수 설명]
+# - 목적: _one_liner 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _one_liner(
     obj_type: str,
     has_writes: bool,
@@ -617,6 +754,13 @@ def _one_liner(
     )
 
 
+# [함수 설명]
+# - 목적: _linked_servers 처리 로직을 수행한다.
+# - 입력: db_dependency: dict[str, Any] | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _linked_servers(db_dependency: dict[str, Any] | None) -> list[str]:
     if not db_dependency:
         return []
@@ -625,6 +769,13 @@ def _linked_servers(db_dependency: dict[str, Any] | None) -> list[str]:
     return _sorted_unique(servers)
 
 
+# [함수 설명]
+# - 목적: _cross_db 처리 로직을 수행한다.
+# - 입력: db_dependency: dict[str, Any] | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _cross_db(db_dependency: dict[str, Any] | None) -> list[str]:
     if not db_dependency:
         return []
@@ -637,10 +788,24 @@ def _cross_db(db_dependency: dict[str, Any] | None) -> list[str]:
     return _sorted_unique(names)
 
 
+# [함수 설명]
+# - 목적: _normalize_name 처리 로직을 수행한다.
+# - 입력: name: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_name(name: str) -> str:
     return name.replace("[", "").replace("]", "").strip().lower()
 
 
+# [함수 설명]
+# - 목적: _sorted_unique 처리 로직을 수행한다.
+# - 입력: items: list[Any]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sorted_unique(items: list[Any]) -> list[Any]:
     seen: set[Any] = set()
     deduped: list[Any] = []
@@ -652,6 +817,13 @@ def _sorted_unique(items: list[Any]) -> list[Any]:
     return sorted(deduped)
 
 
+# [함수 설명]
+# - 목적: _cap_list 처리 로직을 수행한다.
+# - 입력: items: list[Any], max_items: int, errors: list[str], section_name: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _cap_list(items: list[Any], max_items: int, errors: list[str], section_name: str) -> list[Any]:
     if max_items <= 0 or len(items) <= max_items:
         return items

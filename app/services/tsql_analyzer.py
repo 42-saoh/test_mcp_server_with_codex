@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: T-SQL 분석/추천 로직을 제공하는 서비스 모듈이다.
+# - 제공 기능: 분석 결과 요약, 위험도 평가, 전략 추천 등의 함수를 포함한다.
+# - 입력/출력: SQL 또는 옵션을 입력받아 구조화된 dict 결과를 반환한다.
+# - 주의 사항: 원문 SQL은 요약/해시로만 다루며 직접 노출하지 않는다.
+# - 연관 모듈: app.api.mcp 라우터에서 호출된다.
 from __future__ import annotations
 
 import logging
@@ -161,6 +167,13 @@ SELECT_INTO_PATTERN = re.compile(
 )
 
 
+# [함수 설명]
+# - 목적: analyze_references 처리 로직을 수행한다.
+# - 입력: sql: str, dialect: str = "tsql"
+# - 출력: 주요 키는 references, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def analyze_references(sql: str, dialect: str = "tsql") -> dict[str, object]:
     summary = summarize_sql(sql)
     logger.info(
@@ -186,6 +199,13 @@ def analyze_references(sql: str, dialect: str = "tsql") -> dict[str, object]:
     return {"references": references, "errors": errors}
 
 
+# [함수 설명]
+# - 목적: analyze_transactions 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 주요 키는 uses_transaction, counts, signals이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def analyze_transactions(sql: str) -> dict[str, object]:
     summary = summarize_sql(sql)
     logger.info(
@@ -213,6 +233,13 @@ def analyze_transactions(sql: str) -> dict[str, object]:
     signals: list[str] = []
     seen = set()
 
+    # [함수 설명]
+    # - 목적: add_signal 처리 로직을 수행한다.
+    # - 입력: signal: str
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_signal(signal: str) -> None:
         if signal in seen or len(seen) >= 10:
             return
@@ -257,6 +284,13 @@ def analyze_transactions(sql: str) -> dict[str, object]:
     }
 
 
+# [함수 설명]
+# - 목적: analyze_migration_impacts 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 주요 키는 has_impact, items이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def analyze_migration_impacts(sql: str) -> dict[str, object]:
     summary = summarize_sql(sql)
     logger.info(
@@ -269,6 +303,13 @@ def analyze_migration_impacts(sql: str) -> dict[str, object]:
     items: dict[str, dict[str, object]] = {}
     signal_sets: dict[str, set[str]] = {}
 
+    # [함수 설명]
+    # - 목적: ensure_item 처리 로직을 수행한다.
+    # - 입력: 함수 시그니처 인자
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def ensure_item(
         item_id: str,
         category: str,
@@ -288,6 +329,13 @@ def analyze_migration_impacts(sql: str) -> dict[str, object]:
         }
         signal_sets[item_id] = set()
 
+    # [함수 설명]
+    # - 목적: add_signal 처리 로직을 수행한다.
+    # - 입력: item_id: str, signal: str
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_signal(item_id: str, signal: str) -> None:
         signals = items[item_id]["signals"]
         signal_set = signal_sets[item_id]
@@ -296,6 +344,13 @@ def analyze_migration_impacts(sql: str) -> dict[str, object]:
         signal_set.add(signal)
         signals.append(signal)
 
+    # [함수 설명]
+    # - 목적: add_item_with_signals 처리 로직을 수행한다.
+    # - 입력: 함수 시그니처 인자
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_item_with_signals(
         item_id: str,
         category: str,
@@ -494,6 +549,13 @@ def analyze_migration_impacts(sql: str) -> dict[str, object]:
     return {"has_impact": has_impact, "items": ordered_items}
 
 
+# [함수 설명]
+# - 목적: analyze_control_flow 처리 로직을 수행한다.
+# - 입력: sql: str, dialect: str = "tsql"
+# - 출력: 주요 키는 summary, graph, signals, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def analyze_control_flow(sql: str, dialect: str = "tsql") -> dict[str, object]:
     summary = summarize_sql(sql)
     logger.info(
@@ -568,6 +630,13 @@ def analyze_control_flow(sql: str, dialect: str = "tsql") -> dict[str, object]:
     }
 
 
+# [함수 설명]
+# - 목적: analyze_data_changes 처리 로직을 수행한다.
+# - 입력: sql: str, dialect: str = "tsql"
+# - 출력: 주요 키는 operations, table_operations, signals, notes, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def analyze_data_changes(sql: str, dialect: str = "tsql") -> dict[str, object]:
     summary = summarize_sql(sql)
     logger.info(
@@ -589,6 +658,13 @@ def analyze_data_changes(sql: str, dialect: str = "tsql") -> dict[str, object]:
     errors: list[str] = []
     unknown_ops: set[str] = set()
 
+    # [함수 설명]
+    # - 목적: add_operation 처리 로직을 수행한다.
+    # - 입력: op: str, table: str | None
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_operation(op: str, table: str | None) -> None:
         operations[op]["count"] += 1
         if table:
@@ -663,6 +739,13 @@ def analyze_data_changes(sql: str, dialect: str = "tsql") -> dict[str, object]:
     }
 
 
+# [함수 설명]
+# - 목적: analyze_error_handling 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 주요 키는 summary, signals, notes, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def analyze_error_handling(sql: str) -> dict[str, object]:
     summary = summarize_sql(sql)
     logger.info(
@@ -716,6 +799,13 @@ def analyze_error_handling(sql: str) -> dict[str, object]:
 
     output_error_params_set: set[str] = set()
 
+    # [함수 설명]
+    # - 목적: maybe_add_error_param 처리 로직을 수행한다.
+    # - 입력: name: str
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def maybe_add_error_param(name: str) -> None:
         if not ERROR_PARAM_NAME_PATTERN.search(name):
             return
@@ -738,6 +828,13 @@ def analyze_error_handling(sql: str) -> dict[str, object]:
     signals: list[str] = []
     seen_signals: set[str] = set()
 
+    # [함수 설명]
+    # - 목적: add_signal 처리 로직을 수행한다.
+    # - 입력: signal: str
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_signal(signal: str) -> None:
         if signal in seen_signals or len(seen_signals) >= 15:
             return
@@ -799,6 +896,13 @@ def analyze_error_handling(sql: str) -> dict[str, object]:
     }
 
 
+# [함수 설명]
+# - 목적: _fallback_references 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _fallback_references(sql: str) -> dict[str, list[str]]:
     tables = [match.group(1) for match in TABLE_PATTERN.finditer(sql)]
     functions = []
@@ -813,6 +917,13 @@ def _fallback_references(sql: str) -> dict[str, list[str]]:
     }
 
 
+# [함수 설명]
+# - 목적: _extract_tables 처리 로직을 수행한다.
+# - 입력: expressions: Iterable[exp.Expression]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _extract_tables(expressions: Iterable[exp.Expression]) -> list[str]:
     tables: list[str] = []
     for expression in expressions:
@@ -826,6 +937,13 @@ def _extract_tables(expressions: Iterable[exp.Expression]) -> list[str]:
     return tables
 
 
+# [함수 설명]
+# - 목적: _extract_functions 처리 로직을 수행한다.
+# - 입력: expressions: Iterable[exp.Expression]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _extract_functions(expressions: Iterable[exp.Expression]) -> list[str]:
     functions: list[str] = []
     for expression in expressions:
@@ -836,6 +954,13 @@ def _extract_functions(expressions: Iterable[exp.Expression]) -> list[str]:
     return functions
 
 
+# [함수 설명]
+# - 목적: _function_name 처리 로직을 수행한다.
+# - 입력: node: exp.Expression
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _function_name(node: exp.Expression) -> str | None:
     name: str | None
     if isinstance(node, exp.Anonymous):
@@ -853,16 +978,37 @@ def _function_name(node: exp.Expression) -> str | None:
     return name.split(".")[-1]
 
 
+# [함수 설명]
+# - 목적: _sorted_unique 처리 로직을 수행한다.
+# - 입력: values: Iterable[str]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sorted_unique(values: Iterable[str]) -> list[str]:
     normalized = {value.upper() for value in values if value}
     return sorted(normalized)
 
 
+# [함수 설명]
+# - 목적: _strip_sql_comments 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _strip_sql_comments(sql: str) -> str:
     no_block = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL)
     return re.sub(r"--[^\n]*", " ", no_block)
 
 
+# [함수 설명]
+# - 목적: _normalize_identifier 처리 로직을 수행한다.
+# - 입력: identifier: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_identifier(identifier: str) -> str | None:
     cleaned = identifier.strip()
     if not cleaned:
@@ -874,6 +1020,13 @@ def _normalize_identifier(identifier: str) -> str | None:
     return cleaned or None
 
 
+# [함수 설명]
+# - 목적: _normalize_table_name 처리 로직을 수행한다.
+# - 입력: raw: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_table_name(raw: str) -> str | None:
     if not raw:
         return None
@@ -889,6 +1042,13 @@ def _normalize_table_name(raw: str) -> str | None:
     return ".".join(parts).upper()
 
 
+# [함수 설명]
+# - 목적: _table_name_from_expression 처리 로직을 수행한다.
+# - 입력: node: exp.Expression | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _table_name_from_expression(node: exp.Expression | None) -> str | None:
     if node is None:
         return None
@@ -907,6 +1067,13 @@ def _table_name_from_expression(node: exp.Expression | None) -> str | None:
     return None
 
 
+# [함수 설명]
+# - 목적: _fallback_data_changes 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _fallback_data_changes(sql: str) -> dict[str, object]:
     stripped = _strip_sql_comments(sql)
     operations = {
@@ -918,6 +1085,13 @@ def _fallback_data_changes(sql: str) -> dict[str, object]:
         "select_into": {"count": 0, "tables": [], "unknown": False},
     }
 
+    # [함수 설명]
+    # - 목적: add_match 처리 로직을 수행한다.
+    # - 입력: op: str, table: str | None
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_match(op: str, table: str | None) -> None:
         operations[op]["count"] += 1
         if table:
@@ -925,6 +1099,13 @@ def _fallback_data_changes(sql: str) -> dict[str, object]:
         else:
             operations[op]["unknown"] = True
 
+    # [함수 설명]
+    # - 목적: is_merge_context 처리 로직을 수행한다.
+    # - 입력: start: int
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def is_merge_context(start: int) -> bool:
         statement_start = stripped.rfind(";", 0, start)
         if statement_start == -1:
@@ -958,10 +1139,24 @@ def _fallback_data_changes(sql: str) -> dict[str, object]:
     return {"operations": operations}
 
 
+# [함수 설명]
+# - 목적: _data_change_signals 처리 로직을 수행한다.
+# - 입력: operations: dict[str, dict[str, object]], sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _data_change_signals(operations: dict[str, dict[str, object]], sql: str) -> list[str]:
     signals: list[str] = []
     seen: set[str] = set()
 
+    # [함수 설명]
+    # - 목적: add_signal 처리 로직을 수행한다.
+    # - 입력: signal: str
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_signal(signal: str) -> None:
         if signal in seen or len(seen) >= 15:
             return
@@ -992,6 +1187,13 @@ def _data_change_signals(operations: dict[str, dict[str, object]], sql: str) -> 
     return signals
 
 
+# [함수 설명]
+# - 목적: _scan_control_flow_tokens 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _scan_control_flow_tokens(sql: str) -> list[str]:
     tokens: list[str] = []
     for match in CONTROL_FLOW_TOKEN_PATTERN.finditer(sql):
@@ -1013,10 +1215,24 @@ def _scan_control_flow_tokens(sql: str) -> list[str]:
     return tokens
 
 
+# [함수 설명]
+# - 목적: _control_flow_signals 처리 로직을 수행한다.
+# - 입력: tokens: list[str], label_count: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _control_flow_signals(tokens: list[str], label_count: int) -> list[str]:
     signals: list[str] = []
     seen: set[str] = set()
 
+    # [함수 설명]
+    # - 목적: add_signal 처리 로직을 수행한다.
+    # - 입력: signal: str
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_signal(signal: str) -> None:
         if signal in seen or len(seen) >= 10:
             return
@@ -1041,6 +1257,13 @@ def _control_flow_signals(tokens: list[str], label_count: int) -> list[str]:
     return signals
 
 
+# [함수 설명]
+# - 목적: _estimate_nesting_depth 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _estimate_nesting_depth(sql: str) -> int:
     depth = 0
     max_depth = 0
@@ -1054,6 +1277,13 @@ def _estimate_nesting_depth(sql: str) -> int:
     return max_depth
 
 
+# [함수 설명]
+# - 목적: _build_control_flow_graph 처리 로직을 수행한다.
+# - 입력: tokens: list[str]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_control_flow_graph(tokens: list[str]) -> tuple[dict[str, object], list[str]]:
     errors: list[str] = []
     nodes: list[dict[str, str]] = [{"id": "n0", "type": "start", "label": "START"}]

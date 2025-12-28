@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: T-SQL 분석/추천 로직을 제공하는 서비스 모듈이다.
+# - 제공 기능: 분석 결과 요약, 위험도 평가, 전략 추천 등의 함수를 포함한다.
+# - 입력/출력: SQL 또는 옵션을 입력받아 구조화된 dict 결과를 반환한다.
+# - 주의 사항: 원문 SQL은 요약/해시로만 다루며 직접 노출하지 않는다.
+# - 연관 모듈: app.api.mcp 라우터에서 호출된다.
 from __future__ import annotations
 
 import importlib.util
@@ -15,6 +21,11 @@ IDENTIFIER_PATTERN = r"(?:\[[^\]]+\]|[A-Za-z_][\w$#]*)"
 QUALIFIED_NAME_PATTERN = rf"{IDENTIFIER_PATTERN}(?:\s*\.\s*{IDENTIFIER_PATTERN})*"
 
 
+# [클래스 설명]
+# - 역할: SqlObject 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class SqlObject:
     name: str
@@ -22,6 +33,11 @@ class SqlObject:
     sql: str
 
 
+# [클래스 설명]
+# - 역할: Options 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class Options:
     case_insensitive: bool = True
@@ -33,6 +49,13 @@ class Options:
     max_edges: int = 2000
 
 
+# [함수 설명]
+# - 목적: build_call_graph 처리 로직을 수행한다.
+# - 입력: objects: list[SqlObject], options: Options
+# - 출력: 주요 키는 summary, graph, topology, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def build_call_graph(objects: list[SqlObject], options: Options) -> dict[str, object]:
     errors: list[dict[str, str]] = []
     logger.info(
@@ -172,6 +195,13 @@ def build_call_graph(objects: list[SqlObject], options: Options) -> dict[str, ob
     }
 
 
+# [함수 설명]
+# - 목적: _include_object 처리 로직을 수행한다.
+# - 입력: obj: SqlObject, options: Options
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _include_object(obj: SqlObject, options: Options) -> bool:
     obj_type = obj.type.lower()
     if obj_type == "procedure":
@@ -181,11 +211,25 @@ def _include_object(obj: SqlObject, options: Options) -> bool:
     return options.include_procedures or options.include_functions
 
 
+# [함수 설명]
+# - 목적: _index_base_name 처리 로직을 수행한다.
+# - 입력: full_id: str, base_name_index: dict[str, list[str]]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _index_base_name(full_id: str, base_name_index: dict[str, list[str]]) -> None:
     base_name = _split_identifier(full_id, case_insensitive=False)[1]
     base_name_index.setdefault(base_name, []).append(full_id)
 
 
+# [함수 설명]
+# - 목적: _build_patterns 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_patterns(
     case_insensitive: bool,
 ) -> tuple[re.Pattern[str], re.Pattern[str], re.Pattern[str]]:
@@ -202,10 +246,24 @@ def _build_patterns(
     return exec_pattern, function_pattern, function_definition_pattern
 
 
+# [함수 설명]
+# - 목적: _normalize_whitespace 처리 로직을 수행한다.
+# - 입력: sql: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_whitespace(sql: str) -> str:
     return " ".join(sql.split())
 
 
+# [함수 설명]
+# - 목적: _find_definition_spans 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _find_definition_spans(
     sql: str, function_definition_pattern: re.Pattern[str]
 ) -> set[tuple[int, int]]:
@@ -215,11 +273,25 @@ def _find_definition_spans(
     return spans
 
 
+# [함수 설명]
+# - 목적: _is_dynamic_exec 처리 로직을 수행한다.
+# - 입력: name: str, options: Options
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _is_dynamic_exec(name: str, options: Options) -> bool:
     normalized = _normalize_full_name(name, case_insensitive=options.case_insensitive)
     return normalized.endswith("sp_executesql")
 
 
+# [함수 설명]
+# - 목적: _resolve_target 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _resolve_target(
     name: str,
     base_name_index: dict[str, list[str]],
@@ -233,6 +305,13 @@ def _resolve_target(
     normalized = _normalize_full_name(name, case_insensitive=options.case_insensitive)
     schema, base_name = _split_identifier(normalized, case_insensitive=False)
 
+    # [함수 설명]
+    # - 목적: _is_target_type 처리 로직을 수행한다.
+    # - 입력: target_id: str
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def _is_target_type(target_id: str) -> bool:
         node = node_by_id.get(target_id)
         return node is not None and node["type"].lower() == object_type
@@ -267,6 +346,13 @@ def _resolve_target(
     return None
 
 
+# [함수 설명]
+# - 목적: _record_edge 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _record_edge(
     edge_stats: dict[tuple[str, str, str], dict[str, object]],
     from_id: str,
@@ -291,6 +377,13 @@ def _record_edge(
         signals.append(signal)
 
 
+# [함수 설명]
+# - 목적: _build_edges 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_edges(
     edge_stats: dict[tuple[str, str, str], dict[str, object]],
     node_by_id: dict[str, dict[str, str]],
@@ -312,6 +405,13 @@ def _build_edges(
     return edges
 
 
+# [함수 설명]
+# - 목적: _build_topology 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_topology(
     nodes: list[dict[str, str]],
     edges: list[dict[str, object]],
@@ -338,6 +438,13 @@ def _build_topology(
     }
 
 
+# [함수 설명]
+# - 목적: _detect_cycles 처리 로직을 수행한다.
+# - 입력: edges: list[dict[str, object]]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _detect_cycles(edges: list[dict[str, object]]) -> tuple[bool, dict[str, str] | None]:
     if importlib.util.find_spec("networkx") is None:
         return False, {
@@ -352,6 +459,13 @@ def _detect_cycles(edges: list[dict[str, object]]) -> tuple[bool, dict[str, str]
     return (not nx.is_directed_acyclic_graph(graph)), None
 
 
+# [함수 설명]
+# - 목적: _split_identifier 처리 로직을 수행한다.
+# - 입력: name: str, case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _split_identifier(name: str, case_insensitive: bool) -> tuple[str | None, str]:
     parts = [_clean_identifier(part) for part in re.split(r"\.", name) if part.strip()]
     if case_insensitive:
@@ -363,6 +477,13 @@ def _split_identifier(name: str, case_insensitive: bool) -> tuple[str | None, st
     return None, parts[-1]
 
 
+# [함수 설명]
+# - 목적: _normalize_full_name 처리 로직을 수행한다.
+# - 입력: name: str, case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_full_name(name: str, case_insensitive: bool) -> str:
     parts = [_clean_identifier(part) for part in re.split(r"\.", name) if part.strip()]
     if case_insensitive:
@@ -370,6 +491,13 @@ def _normalize_full_name(name: str, case_insensitive: bool) -> str:
     return ".".join(parts)
 
 
+# [함수 설명]
+# - 목적: _clean_identifier 처리 로직을 수행한다.
+# - 입력: part: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _clean_identifier(part: str) -> str:
     part = part.strip()
     if part.startswith("[") and part.endswith("]") and len(part) > 1:

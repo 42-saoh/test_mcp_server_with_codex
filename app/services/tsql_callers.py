@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: T-SQL 분석/추천 로직을 제공하는 서비스 모듈이다.
+# - 제공 기능: 분석 결과 요약, 위험도 평가, 전략 추천 등의 함수를 포함한다.
+# - 입력/출력: SQL 또는 옵션을 입력받아 구조화된 dict 결과를 반환한다.
+# - 주의 사항: 원문 SQL은 요약/해시로만 다루며 직접 노출하지 않는다.
+# - 연관 모듈: app.api.mcp 라우터에서 호출된다.
 from __future__ import annotations
 
 import logging
@@ -16,6 +22,11 @@ IDENTIFIER_PATTERN = r"(?:\[[^\]]+\]|[A-Za-z_][\w$#]*)"
 QUALIFIED_NAME_PATTERN = rf"{IDENTIFIER_PATTERN}(?:\s*\.\s*{IDENTIFIER_PATTERN})*"
 
 
+# [클래스 설명]
+# - 역할: SqlObject 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class SqlObject:
     name: str
@@ -23,6 +34,11 @@ class SqlObject:
     sql: str
 
 
+# [클래스 설명]
+# - 역할: CallerOptions 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class CallerOptions:
     case_insensitive: bool = True
@@ -30,6 +46,13 @@ class CallerOptions:
     include_self: bool = False
 
 
+# [함수 설명]
+# - 목적: find_callers 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def find_callers(
     target: str, target_type: str, objects: list[SqlObject], options: CallerOptions
 ) -> dict[str, object]:
@@ -128,6 +151,13 @@ def find_callers(
     }
 
 
+# [함수 설명]
+# - 목적: _apply_limits 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _apply_limits(
     objects: list[SqlObject], total_length: int, errors: list[str]
 ) -> list[SqlObject]:
@@ -157,6 +187,13 @@ def _apply_limits(
     return trimmed
 
 
+# [함수 설명]
+# - 목적: _build_patterns 처리 로직을 수행한다.
+# - 입력: case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _build_patterns(case_insensitive: bool) -> tuple[re.Pattern[str], re.Pattern[str]]:
     flags = re.IGNORECASE if case_insensitive else 0
     exec_pattern = re.compile(
@@ -167,6 +204,13 @@ def _build_patterns(case_insensitive: bool) -> tuple[re.Pattern[str], re.Pattern
     return exec_pattern, function_pattern
 
 
+# [함수 설명]
+# - 목적: _find_exec_calls 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _find_exec_calls(
     sql: str,
     target_schema: str | None,
@@ -185,6 +229,13 @@ def _find_exec_calls(
     return matches
 
 
+# [함수 설명]
+# - 목적: _find_function_calls 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _find_function_calls(
     sql: str,
     target_schema: str | None,
@@ -201,6 +252,13 @@ def _find_function_calls(
     return matches
 
 
+# [함수 설명]
+# - 목적: _matches_target 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _matches_target(
     candidate: str, target_schema: str | None, target_name: str, options: CallerOptions
 ) -> bool:
@@ -210,6 +268,13 @@ def _matches_target(
     return name == target_name
 
 
+# [함수 설명]
+# - 목적: _split_identifier 처리 로직을 수행한다.
+# - 입력: name: str, case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _split_identifier(name: str, case_insensitive: bool) -> tuple[str | None, str]:
     parts = [_clean_identifier(part) for part in re.split(r"\.", name) if part.strip()]
     if case_insensitive:
@@ -221,6 +286,13 @@ def _split_identifier(name: str, case_insensitive: bool) -> tuple[str | None, st
     return None, parts[-1]
 
 
+# [함수 설명]
+# - 목적: _normalize_full_name 처리 로직을 수행한다.
+# - 입력: name: str, case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_full_name(name: str, case_insensitive: bool) -> str:
     parts = [_clean_identifier(part) for part in re.split(r"\.", name) if part.strip()]
     if case_insensitive:
@@ -228,6 +300,13 @@ def _normalize_full_name(name: str, case_insensitive: bool) -> str:
     return ".".join(parts)
 
 
+# [함수 설명]
+# - 목적: _clean_identifier 처리 로직을 수행한다.
+# - 입력: part: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _clean_identifier(part: str) -> str:
     part = part.strip()
     if part.startswith("[") and part.endswith("]") and len(part) > 1:
@@ -237,6 +316,13 @@ def _clean_identifier(part: str) -> str:
     return part
 
 
+# [함수 설명]
+# - 목적: _ordered_unique 처리 로직을 수행한다.
+# - 입력: items: list[str]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _ordered_unique(items: list[str]) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
@@ -248,6 +334,13 @@ def _ordered_unique(items: list[str]) -> list[str]:
     return ordered
 
 
+# [함수 설명]
+# - 목적: _is_self 처리 로직을 수행한다.
+# - 입력: name: str, normalized_target: str, case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _is_self(name: str, normalized_target: str, case_insensitive: bool) -> bool:
     candidate = _normalize_full_name(name, case_insensitive=case_insensitive)
     return candidate == normalized_target

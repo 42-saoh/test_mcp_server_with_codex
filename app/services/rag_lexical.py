@@ -1,3 +1,9 @@
+# [파일 설명]
+# - 목적: 문서 조각을 기반으로 한 간단한 RAG 검색 유틸을 제공한다.
+# - 제공 기능: 인덱스 구축, 쿼리 용어 추출, 검색 및 스니펫 생성 기능을 제공한다.
+# - 입력/출력: 문서 목록과 쿼리를 받아 검색 결과/추천을 반환한다.
+# - 주의 사항: 외부 네트워크 없이 로컬 텍스트만 처리한다.
+# - 연관 모듈: 표준화 명세 생성(app.services.tsql_standardization_spec)에서 사용된다.
 from __future__ import annotations
 
 import math
@@ -12,6 +18,11 @@ TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
 SUPPORTED_EXTENSIONS = {".md", ".txt"}
 
 
+# [클래스 설명]
+# - 역할: DocChunk 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class DocChunk:
     doc_id: str
@@ -21,6 +32,11 @@ class DocChunk:
     chunk_id: int
 
 
+# [클래스 설명]
+# - 역할: Index 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class Index:
     chunks: list[DocChunk]
@@ -30,6 +46,11 @@ class Index:
     case_insensitive: bool
 
 
+# [클래스 설명]
+# - 역할: Hit 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 @dataclass(frozen=True)
 class Hit:
     doc_id: str
@@ -39,6 +60,13 @@ class Hit:
     text: str
 
 
+# [함수 설명]
+# - 목적: load_documents 처리 로직을 수행한다.
+# - 입력: docs_dir: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def load_documents(docs_dir: str) -> list[DocChunk]:
     root = Path(docs_dir)
     if not root.exists() or not root.is_dir():
@@ -68,6 +96,13 @@ def load_documents(docs_dir: str) -> list[DocChunk]:
     return chunks
 
 
+# [함수 설명]
+# - 목적: build_index 처리 로직을 수행한다.
+# - 입력: chunks: list[DocChunk], *, case_insensitive: bool = True
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def build_index(chunks: list[DocChunk], *, case_insensitive: bool = True) -> Index:
     if not chunks:
         return Index(chunks=[], vectors=[], norms=[], idf={}, case_insensitive=case_insensitive)
@@ -94,6 +129,13 @@ def build_index(chunks: list[DocChunk], *, case_insensitive: bool = True) -> Ind
     )
 
 
+# [함수 설명]
+# - 목적: search 처리 로직을 수행한다.
+# - 입력: index: Index, query: str, top_k: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def search(index: Index, query: str, top_k: int) -> list[Hit]:
     if not query.strip():
         return []
@@ -132,6 +174,13 @@ def search(index: Index, query: str, top_k: int) -> list[Hit]:
     return hits[: max(top_k, 0)]
 
 
+# [함수 설명]
+# - 목적: extract_query_terms 처리 로직을 수행한다.
+# - 입력: spec: dict[str, Any]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def extract_query_terms(spec: dict[str, Any]) -> list[str]:
     terms: list[str] = []
     for tag in spec.get("tags", []):
@@ -148,6 +197,13 @@ def extract_query_terms(spec: dict[str, Any]) -> list[str]:
     return _sorted_unique(normalized)[:30]
 
 
+# [함수 설명]
+# - 목적: build_snippet 처리 로직을 수행한다.
+# - 입력: text: str, max_chars: int
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def build_snippet(text: str, max_chars: int) -> tuple[str, bool]:
     cleaned = " ".join(text.split())
     if max_chars <= 0 or len(cleaned) <= max_chars:
@@ -155,6 +211,13 @@ def build_snippet(text: str, max_chars: int) -> tuple[str, bool]:
     return cleaned[:max_chars].rstrip(), True
 
 
+# [함수 설명]
+# - 목적: build_pattern_recommendations 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def build_pattern_recommendations(
     spec: dict[str, Any],
     hits: list[Hit],
@@ -169,6 +232,13 @@ def build_pattern_recommendations(
 
     recommendations: list[dict[str, Any]] = []
 
+    # [함수 설명]
+    # - 목적: add_recommendation 처리 로직을 수행한다.
+    # - 입력: rec_id: str, message: str, keywords: Iterable[str]
+    # - 출력: 구조화된 dict 결과를 반환한다.
+    # - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+    # - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+    # - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
     def add_recommendation(rec_id: str, message: str, keywords: Iterable[str]) -> None:
         source_doc_id = _best_doc_for_keywords(hits, keywords)
         recommendations.append({"id": rec_id, "message": message, "source_doc_id": source_doc_id})
@@ -212,6 +282,13 @@ def build_pattern_recommendations(
     return recommendations
 
 
+# [함수 설명]
+# - 목적: _template_matches 처리 로직을 수행한다.
+# - 입력: template_ids: set[str], keyword: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _template_matches(template_ids: set[str], keyword: str) -> bool:
     keyword_upper = keyword.upper()
     for template_id in template_ids:
@@ -223,11 +300,25 @@ def _template_matches(template_ids: set[str], keyword: str) -> bool:
     return False
 
 
+# [함수 설명]
+# - 목적: _risk_matches 처리 로직을 수행한다.
+# - 입력: risk_ids: Iterable[str], keyword: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _risk_matches(risk_ids: Iterable[str], keyword: str) -> bool:
     keyword_upper = keyword.upper()
     return any(keyword_upper in str(risk_id).upper() for risk_id in risk_ids)
 
 
+# [함수 설명]
+# - 목적: _best_doc_for_keywords 처리 로직을 수행한다.
+# - 입력: hits: list[Hit], keywords: Iterable[str]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _best_doc_for_keywords(hits: list[Hit], keywords: Iterable[str]) -> str | None:
     normalized_keywords = [_normalize_term(word) for word in keywords if word]
     best_score = 0
@@ -243,12 +334,26 @@ def _best_doc_for_keywords(hits: list[Hit], keywords: Iterable[str]) -> str | No
     return best_doc_id
 
 
+# [함수 설명]
+# - 목적: _tokenize 처리 로직을 수행한다.
+# - 입력: text: str, *, case_insensitive: bool
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _tokenize(text: str, *, case_insensitive: bool) -> list[str]:
     if case_insensitive:
         text = text.lower()
     return TOKEN_PATTERN.findall(text)
 
 
+# [함수 설명]
+# - 목적: _extract_title 처리 로직을 수행한다.
+# - 입력: path: Path, text: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _extract_title(path: Path, text: str) -> str:
     if path.suffix.lower() == ".md":
         for line in text.splitlines():
@@ -260,12 +365,26 @@ def _extract_title(path: Path, text: str) -> str:
     return path.name
 
 
+# [함수 설명]
+# - 목적: _chunk_text 처리 로직을 수행한다.
+# - 입력: extension: str, text: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _chunk_text(extension: str, text: str) -> list[str]:
     if extension == ".md":
         return _chunk_markdown(text)
     return _chunk_plaintext(text)
 
 
+# [함수 설명]
+# - 목적: _chunk_markdown 처리 로직을 수행한다.
+# - 입력: text: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _chunk_markdown(text: str) -> list[str]:
     chunks: list[str] = []
     current: list[str] = []
@@ -288,6 +407,13 @@ def _chunk_markdown(text: str) -> list[str]:
     return chunks
 
 
+# [함수 설명]
+# - 목적: _chunk_plaintext 처리 로직을 수행한다.
+# - 입력: text: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _chunk_plaintext(text: str) -> list[str]:
     chunks: list[str] = []
     current: list[str] = []
@@ -303,11 +429,25 @@ def _chunk_plaintext(text: str) -> list[str]:
     return chunks
 
 
+# [함수 설명]
+# - 목적: _normalize_term 처리 로직을 수행한다.
+# - 입력: term: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _normalize_term(term: str) -> str:
     normalized = term.strip().lower()
     return normalized
 
 
+# [함수 설명]
+# - 목적: _sorted_unique 처리 로직을 수행한다.
+# - 입력: items: list[str]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
 def _sorted_unique(items: list[str]) -> list[str]:
     seen: set[str] = set()
     deduped: list[str] = []
