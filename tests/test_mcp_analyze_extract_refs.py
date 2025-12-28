@@ -10,14 +10,34 @@ from app.main import app
 
 
 # [함수 설명]
-# - 목적: health 동작을 검증한다.
+# - 목적: mcp analyze extracts tables and functions 동작을 검증한다.
 # - 입력: 테스트 픽스처/클라이언트 등 고정 입력을 사용한다.
 # - 출력: 예외 없이 단언을 통과하면 성공으로 간주한다.
 # - 에러 처리: 실패 시 pytest가 assertion 결과를 보고한다.
 # - 결정론: 동일 입력으로 항상 재현 가능한 검증을 수행한다.
 # - 보안: 테스트 로그에 원문 SQL/민감 정보를 남기지 않는다.
-def test_health() -> None:
+def test_mcp_analyze_extracts_tables_and_functions() -> None:
     client = TestClient(app)
-    r = client.get("/health")
-    assert r.status_code == 200
-    assert r.json()["status"] == "ok"
+    payload = {
+        "sql": """
+        CREATE PROCEDURE dbo.GetUserSummary AS
+        BEGIN
+            SELECT dbo.FormatName(u.FirstName, u.LastName) AS DisplayName,
+                   COUNT(*) AS Total
+            FROM dbo.Users u
+            JOIN sales.Orders o ON o.UserId = u.Id
+            WHERE u.IsActive = 1 AND YEAR(o.CreatedAt) = 2024
+        END
+        """,
+        "dialect": "tsql",
+    }
+
+    response = client.post("/mcp/analyze", json=payload)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["version"] == "0.6"
+    assert data["errors"] == []
+    assert set(data["references"]["tables"]) >= {"DBO.USERS", "SALES.ORDERS"}
+    assert set(data["references"]["functions"]) >= {"COUNT", "YEAR", "FORMATNAME"}
+    assert "transactions" in data

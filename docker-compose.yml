@@ -6,6 +6,8 @@ networks:
     internal: true
   frontend:
     driver: bridge
+  hostAccess:
+    driver: bridge
 
 services:
   mcp-python:
@@ -58,5 +60,8 @@ services:
       - ./ms_sql/secrets:/var/opt/mssql/secrets
     networks:
       backend:
+        aliases:
+          - mssql
+      hostAccess:
         aliases:
           - mssql

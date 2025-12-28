@@ -10,14 +10,16 @@ from app.main import app
 
 
 # [함수 설명]
-# - 목적: health 동작을 검증한다.
+# - 목적: health returns ok 동작을 검증한다.
 # - 입력: 테스트 픽스처/클라이언트 등 고정 입력을 사용한다.
 # - 출력: 예외 없이 단언을 통과하면 성공으로 간주한다.
 # - 에러 처리: 실패 시 pytest가 assertion 결과를 보고한다.
 # - 결정론: 동일 입력으로 항상 재현 가능한 검증을 수행한다.
 # - 보안: 테스트 로그에 원문 SQL/민감 정보를 남기지 않는다.
-def test_health() -> None:
+def test_health_returns_ok() -> None:
     client = TestClient(app)
-    r = client.get("/health")
-    assert r.status_code == 200
-    assert r.json()["status"] == "ok"
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}

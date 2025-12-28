@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # (Debian slim 기준)
 RUN set -eux; \
     curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg; \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/microsoft-prod.list; \
+    echo "deb [signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/microsoft-prod.list; \
     apt-get update; \
     ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18; \
     rm -rf /var/lib/apt/lists/*
@@ -45,5 +45,5 @@ RUN mkdir -p /data/faiss /app/logs
 EXPOSE 9700
 
 # NOTE:
-# - app/server.py 내부에서 mcp.run(transport="streamable-http", host="0.0.0.0", port=int(os.getenv("MCP_PORT", 9700)), ...) 형태로 실행되도록 맞춰주세요.
-CMD ["python", "-m", "app.server"]
+# - FastAPI entrypoint is app.main:app.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9700"]

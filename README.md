@@ -34,3 +34,89 @@ VS Code에서 GitHub Copilot과 연동하여 SP/FN 분석 결과, 변환 가이�
 ### 5) RAG 기반 표준화(옵션)
 - 사내 표준 문서/가이드, 변환 규칙, 예제 코드 등을 인덱싱
 - 분석 결과와 함께 근거 문서/권장 패턴을 함께 반환
+
+---
+
+## MCP API
+
+### Endpoints
+- `GET /health`: 서버 상태 확인 (`{"status":"ok"}`)
+- `POST /mcp/analyze`: SP/FN 분석 결과 반환
+- `POST /mcp/standardize/spec`: 표준화 스펙 생성 (5.1)
+- `POST /mcp/standardize/spec-with-evidence`: 표준화 스펙 + 근거 문서 (5.2)
+- `POST /mcp/callers`: 호출 관계(콜러) 분석
+- `POST /mcp/external-deps`: 외부 의존성 분석
+- `POST /mcp/common/reusability`: 유틸화 가능성 평가(스코어/사유/권장사항)
+- `POST /mcp/common/rules-template`: 비즈니스 규칙 + 템플릿 매핑
+- `POST /mcp/common/call-graph`: 호출 그래프 생성
+- `POST /mcp/migration/mapping-strategy`: Java + MyBatis 매핑 전략 추천
+- `POST /mcp/migration/mybatis-difficulty`: MyBatis 변환 난이도 평가
+- `POST /mcp/migration/transaction-boundary`: 트랜잭션 경계 가이드
+- `POST /mcp/quality/performance-risk`: 성능 리스크 분석
+- `POST /mcp/quality/db-dependency`: DB 의존도 분석
+
+### Notes
+- Offline only (no network, no DB, no API keys required for tests).
+- No raw SQL is returned in API responses.
+- Deterministic outputs for identical inputs (ordering and truncation are stable).
+
+### Example curl
+
+```bash
+curl -X POST http://localhost:9700/mcp/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"<SQL_PLACEHOLDER>","dialect":"tsql"}'
+```
+
+```bash
+curl -X POST http://localhost:9700/mcp/standardize/spec-with-evidence \
+  -H "Content-Type: application/json" \
+  -d '{"object":{"name":"dbo.usp_Name","type":"procedure"},"sql":"<SQL_PLACEHOLDER>","options":{"docs_dir":"data/standard_docs","top_k":3}}'
+```
+
+```bash
+curl -X POST http://localhost:9700/mcp/migration/mapping-strategy \
+  -H "Content-Type: application/json" \
+  -d '{"name":"dbo.usp_Name","type":"procedure","sql":"<SQL_PLACEHOLDER>","options":{"target_style":"rewrite"}}'
+```
+
+---
+
+## VS Code MCP (HTTP)
+
+### VS Code 설정 예시 (.vscode/mcp.json)
+
+```json
+{
+  "servers": {
+    "mssql-migration": {
+      "type": "http",
+      "url": "http://localhost:9700/mcp"
+    }
+  }
+}
+```
+
+### 실행 방법
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 9700
+```
+
+### Handshake expectations
+
+1. `initialize` (JSON-RPC request)
+2. `notifications/initialized` (JSON-RPC notification)
+3. `tools/list`
+4. `tools/call`
+
+### MCP tools
+
+#### `tsql.analyze`
+- 설명: T-SQL을 분석하여 참조/트랜잭션/제어 흐름/마이그레이션 영향 등을 반환한다.
+- Input schema 요약:
+  - `sql` (string, required): 분석 대상 T-SQL
+  - `dialect` (string, optional, default: `tsql`)
+- Output 요약:
+  - `references`, `transactions`, `migration_impacts`, `control_flow`, `data_changes`, `error_handling`, `errors`
+

@@ -1,0 +1,831 @@
+# [파일 설명]
+# - 목적: T-SQL 분석/추천 로직을 제공하는 서비스 모듈이다.
+# - 제공 기능: 분석 결과 요약, 위험도 평가, 전략 추천 등의 함수를 포함한다.
+# - 입력/출력: SQL 또는 옵션을 입력받아 구조화된 dict 결과를 반환한다.
+# - 주의 사항: 원문 SQL은 요약/해시로만 다루며 직접 노출하지 않는다.
+# - 연관 모듈: app.api.mcp 라우터에서 호출된다.
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from importlib import import_module
+from importlib.util import find_spec
+from typing import Any
+
+from app.services.safe_sql import summarize_sql
+
+logger = logging.getLogger(__name__)
+
+
+# [함수 설명]
+# - 목적: _load_module 처리 로직을 수행한다.
+# - 입력: module_name: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _load_module(module_name: str) -> Any | None:
+    if find_spec(module_name) is None:
+        return None
+    return import_module(module_name)
+
+
+_ANALYZER_MODULE = _load_module("app.services.tsql_analyzer")
+_BUSINESS_RULES_MODULE = _load_module("app.services.tsql_business_rules")
+_MAPPING_STRATEGY_MODULE = _load_module("app.services.tsql_mapping_strategy")
+_TX_BOUNDARY_MODULE = _load_module("app.services.tsql_tx_boundary")
+_DIFFICULTY_MODULE = _load_module("app.services.tsql_mybatis_difficulty")
+_PERF_RISK_MODULE = _load_module("app.services.tsql_performance_risk")
+_DB_DEP_MODULE = _load_module("app.services.tsql_db_dependency")
+
+
+# [클래스 설명]
+# - 역할: Options 데이터 모델/구성 요소을 정의한다.
+# - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
+# - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
+# - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
+@dataclass(frozen=True)
+class Options:
+    dialect: str = "tsql"
+    case_insensitive: bool = True
+    include_sections: list[str] | None = None
+    max_items_per_section: int = 50
+
+
+ALL_SECTIONS = [
+    "references",
+    "transactions",
+    "migration_impacts",
+    "control_flow",
+    "data_changes",
+    "error_handling",
+    "business_rules",
+    "mybatis_strategy",
+    "tx_boundary",
+    "difficulty",
+    "perf_risk",
+    "db_dependency",
+]
+
+
+# [함수 설명]
+# - 목적: build_standardization_spec 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 주요 키는 object, spec, errors이다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def build_standardization_spec(
+    name: str,
+    obj_type: str,
+    sql: str | None,
+    inputs: dict[str, Any] | None,
+    options: Options,
+) -> dict[str, Any]:
+    include_sections = _normalize_sections(options.include_sections)
+    errors: list[str] = []
+
+    if sql is not None:
+        summary = summarize_sql(sql)
+        logger.info(
+            "build_standardization_spec: sql_len=%s sql_hash=%s obj_type=%s",
+            summary["len"],
+            summary["sha256_8"],
+            obj_type,
+        )
+    else:
+        logger.info("build_standardization_spec: inputs_only obj_type=%s", obj_type)
+
+    analyze_inputs = inputs.get("analyze") if inputs else None
+
+    references = _resolve_section(
+        "references",
+        include_sections,
+        errors,
+        _extract_input(analyze_inputs, "references"),
+        _call_analyzer(sql, "analyze_references", [options.dialect]),
+    )
+    transactions = _resolve_section(
+        "transactions",
+        include_sections,
+        errors,
+        _extract_input(analyze_inputs, "transactions"),
+        _call_analyzer(sql, "analyze_transactions"),
+    )
+    migration_impacts = _resolve_section(
+        "migration_impacts",
+        include_sections,
+        errors,
+        _extract_input(analyze_inputs, "migration_impacts"),
+        _call_analyzer(sql, "analyze_migration_impacts"),
+    )
+    control_flow = _resolve_section(
+        "control_flow",
+        include_sections,
+        errors,
+        _extract_input(analyze_inputs, "control_flow"),
+        _call_analyzer(sql, "analyze_control_flow", [options.dialect]),
+    )
+    data_changes = _resolve_section(
+        "data_changes",
+        include_sections,
+        errors,
+        _extract_input(analyze_inputs, "data_changes"),
+        _call_analyzer(sql, "analyze_data_changes", [options.dialect]),
+    )
+    error_handling = _resolve_section(
+        "error_handling",
+        include_sections,
+        errors,
+        _extract_input(analyze_inputs, "error_handling"),
+        _call_analyzer(sql, "analyze_error_handling"),
+    )
+
+    _extend_errors(errors, analyze_inputs)
+    _extend_errors(errors, references, "errors")
+    _extend_errors(errors, control_flow, "errors")
+    _extend_errors(errors, data_changes, "errors")
+
+    references = _unwrap_section(references, "references")
+    control_flow = _unwrap_section(control_flow, "control_flow")
+    data_changes = _unwrap_section(data_changes, "data_changes")
+
+    business_rules = _resolve_section(
+        "business_rules",
+        include_sections,
+        errors,
+        _extract_input(inputs, "business_rules"),
+        _call_module_function(
+            sql,
+            _BUSINESS_RULES_MODULE,
+            "analyze_business_rules",
+            [
+                options.dialect,
+                options.case_insensitive,
+                options.max_items_per_section,
+                options.max_items_per_section,
+            ],
+        ),
+    )
+
+    mapping_strategy = _resolve_section(
+        "mybatis_strategy",
+        include_sections,
+        errors,
+        _extract_input(inputs, "mybatis_strategy"),
+        _call_module_function(
+            sql,
+            _MAPPING_STRATEGY_MODULE,
+            "recommend_mapping_strategy",
+            [
+                obj_type,
+                options.dialect,
+                options.case_insensitive,
+                "rewrite_to_mybatis_sql",
+                options.max_items_per_section,
+            ],
+        ),
+    )
+
+    tx_boundary = _resolve_section(
+        "tx_boundary",
+        include_sections,
+        errors,
+        _extract_input(inputs, "tx_boundary"),
+        _call_module_function(
+            sql,
+            _TX_BOUNDARY_MODULE,
+            "recommend_transaction_boundary",
+            [
+                obj_type,
+                options.dialect,
+                options.case_insensitive,
+                True,
+                options.max_items_per_section,
+            ],
+        ),
+    )
+
+    difficulty = _resolve_section(
+        "difficulty",
+        include_sections,
+        errors,
+        _extract_input(inputs, "difficulty"),
+        _call_module_function(
+            sql,
+            _DIFFICULTY_MODULE,
+            "evaluate_mybatis_difficulty",
+            [
+                obj_type,
+                options.dialect,
+                options.case_insensitive,
+                options.max_items_per_section,
+            ],
+        ),
+    )
+
+    perf_risk = _resolve_section(
+        "perf_risk",
+        include_sections,
+        errors,
+        _extract_input(inputs, "perf_risk"),
+        _call_module_function(
+            sql,
+            _PERF_RISK_MODULE,
+            "analyze_performance_risk",
+            [
+                options.dialect,
+                options.case_insensitive,
+                options.max_items_per_section,
+            ],
+        ),
+    )
+
+    db_dependency = _resolve_section(
+        "db_dependency",
+        include_sections,
+        errors,
+        _extract_input(inputs, "db_dependency"),
+        _call_module_function(
+            sql,
+            _DB_DEP_MODULE,
+            "analyze_db_dependency",
+            [
+                options.dialect,
+                options.case_insensitive,
+                False,
+                options.max_items_per_section,
+            ],
+        ),
+    )
+
+    has_writes = _safe_get(data_changes, ["has_writes"], default=False)
+    uses_transaction = _safe_get(transactions, ["uses_transaction"], default=False)
+    cyclomatic_complexity = _safe_get(control_flow, ["summary", "cyclomatic_complexity"], 0)
+    impact_ids = {item["id"] for item in _safe_list(migration_impacts, "items")}
+
+    linked_servers = _linked_servers(db_dependency)
+    cross_db = _cross_db(db_dependency)
+    perf_risk_level = _safe_get(perf_risk, ["summary", "risk_level"], default="unknown")
+    difficulty_level = _difficulty_level(mapping_strategy, difficulty)
+
+    tags = _build_tags(
+        has_writes=has_writes,
+        uses_transaction=uses_transaction,
+        impact_ids=impact_ids,
+        cyclomatic_complexity=cyclomatic_complexity,
+        linked_servers=linked_servers,
+        cross_db=cross_db,
+        perf_risk_level=perf_risk_level,
+        difficulty_level=difficulty_level,
+    )
+    tags = sorted(set(tags))
+    tags = _cap_list(tags, options.max_items_per_section, errors, "tags")
+
+    templates = _build_templates(business_rules)
+    templates = sorted(templates, key=lambda item: (-item["confidence"], item["id"]))
+    templates = _cap_list(templates, options.max_items_per_section, errors, "templates")
+
+    rules = _build_rules(business_rules)
+    rules = sorted(rules, key=lambda item: (item["sort_key"], item["id"]))
+    rules = [rule["payload"] for rule in rules]
+    rules = _cap_list(rules, options.max_items_per_section, errors, "rules")
+
+    dependencies = {
+        "tables": _sorted_unique(_safe_get(references, ["tables"], default=[])),
+        "functions": _sorted_unique(_safe_get(references, ["functions"], default=[])),
+        "cross_db": cross_db,
+        "linked_servers": linked_servers,
+    }
+    dependencies["tables"] = _cap_list(
+        dependencies["tables"], options.max_items_per_section, errors, "dependencies.tables"
+    )
+    dependencies["functions"] = _cap_list(
+        dependencies["functions"],
+        options.max_items_per_section,
+        errors,
+        "dependencies.functions",
+    )
+    dependencies["cross_db"] = _cap_list(
+        dependencies["cross_db"], options.max_items_per_section, errors, "dependencies.cross_db"
+    )
+    dependencies["linked_servers"] = _cap_list(
+        dependencies["linked_servers"],
+        options.max_items_per_section,
+        errors,
+        "dependencies.linked_servers",
+    )
+
+    transactions_spec = _transaction_spec(transactions, tx_boundary)
+    mybatis_spec = {
+        "approach": _safe_get(mapping_strategy, ["summary", "approach"], default="unknown"),
+        "difficulty_score": _safe_get(difficulty, ["summary", "difficulty_score"]),
+    }
+
+    risks = {
+        "migration_impacts": _sorted_unique([item["id"] for item in _safe_list(migration_impacts)]),
+        "performance": _sorted_unique([item["id"] for item in _safe_list(perf_risk, "findings")]),
+        "db_dependency": _sorted_unique(
+            [item["id"] for item in _safe_list(db_dependency, "reasons")]
+        ),
+    }
+    risks["migration_impacts"] = _cap_list(
+        risks["migration_impacts"],
+        options.max_items_per_section,
+        errors,
+        "risks.migration_impacts",
+    )
+    risks["performance"] = _cap_list(
+        risks["performance"],
+        options.max_items_per_section,
+        errors,
+        "risks.performance",
+    )
+    risks["db_dependency"] = _cap_list(
+        risks["db_dependency"],
+        options.max_items_per_section,
+        errors,
+        "risks.db_dependency",
+    )
+
+    recommendations = _build_recommendations(mapping_strategy, difficulty, perf_risk, db_dependency)
+    recommendations = sorted(recommendations, key=lambda item: item["id"])
+    recommendations = _cap_list(
+        recommendations, options.max_items_per_section, errors, "recommendations"
+    )
+
+    summary = {
+        "one_liner": _one_liner(
+            obj_type,
+            has_writes,
+            cyclomatic_complexity,
+            mybatis_spec["approach"],
+            perf_risk_level,
+            difficulty_level,
+        ),
+        "risk_level": perf_risk_level,
+        "difficulty_level": difficulty_level,
+    }
+
+    evidence = {
+        "signals": {
+            "table_count": len(dependencies["tables"]),
+            "cyclomatic_complexity": cyclomatic_complexity,
+            "has_writes": has_writes,
+            "uses_transaction": uses_transaction,
+            "has_try_catch": _safe_get(error_handling, ["has_try_catch"], default=False),
+        }
+    }
+
+    return {
+        "version": "5.1.0",
+        "object": {
+            "name": name,
+            "type": obj_type,
+            "normalized": _normalize_name(name),
+        },
+        "spec": {
+            "tags": tags,
+            "summary": summary,
+            "templates": templates,
+            "rules": rules,
+            "dependencies": dependencies,
+            "transactions": transactions_spec,
+            "mybatis": mybatis_spec,
+            "risks": risks,
+            "recommendations": recommendations,
+            "evidence": evidence,
+        },
+        "errors": _sorted_unique(errors),
+    }
+
+
+# [함수 설명]
+# - 목적: _normalize_sections 처리 로직을 수행한다.
+# - 입력: sections: list[str] | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _normalize_sections(sections: list[str] | None) -> list[str]:
+    if not sections:
+        return ALL_SECTIONS[:]
+    normalized = [item.strip().lower() for item in sections if item.strip()]
+    return _sorted_unique(normalized)
+
+
+# [함수 설명]
+# - 목적: _extract_input 처리 로직을 수행한다.
+# - 입력: inputs: dict[str, Any] | None, key: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _extract_input(inputs: dict[str, Any] | None, key: str) -> dict[str, Any] | None:
+    if not inputs:
+        return None
+    return inputs.get(key)
+
+
+# [함수 설명]
+# - 목적: _unwrap_section 처리 로직을 수행한다.
+# - 입력: payload: dict[str, Any] | None, key: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _unwrap_section(payload: dict[str, Any] | None, key: str) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    if key in payload and isinstance(payload[key], dict):
+        return payload[key]
+    return payload
+
+
+# [함수 설명]
+# - 목적: _extend_errors 처리 로직을 수행한다.
+# - 입력: errors: list[str], payload: dict[str, Any] | None, key: str = "errors"
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _extend_errors(errors: list[str], payload: dict[str, Any] | None, key: str = "errors") -> None:
+    if not payload:
+        return
+    payload_errors = payload.get(key)
+    if payload_errors:
+        errors.extend(payload_errors)
+
+
+# [함수 설명]
+# - 목적: _resolve_section 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _resolve_section(
+    section: str,
+    include_sections: list[str],
+    errors: list[str],
+    input_value: dict[str, Any] | None,
+    computed_value: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if input_value is not None:
+        return input_value
+    if computed_value is not None:
+        return computed_value
+    if section in include_sections:
+        errors.append(f"SECTION_NOT_AVAILABLE: {section}")
+    return None
+
+
+# [함수 설명]
+# - 목적: _call_analyzer 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _call_analyzer(
+    sql: str | None, name: str, args: list[Any] | None = None
+) -> dict[str, Any] | None:
+    if sql is None or _ANALYZER_MODULE is None:
+        return None
+    func = getattr(_ANALYZER_MODULE, name, None)
+    if func is None:
+        return None
+    return func(sql, *(args or []))
+
+
+# [함수 설명]
+# - 목적: _call_module_function 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _call_module_function(
+    sql: str | None,
+    module: Any | None,
+    name: str,
+    args: list[Any],
+) -> dict[str, Any] | None:
+    if sql is None or module is None:
+        return None
+    func = getattr(module, name, None)
+    if func is None:
+        return None
+    return func(sql, *args)
+
+
+# [함수 설명]
+# - 목적: _safe_get 처리 로직을 수행한다.
+# - 입력: payload: dict[str, Any] | None, path: list[str], default: Any = None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _safe_get(payload: dict[str, Any] | None, path: list[str], default: Any = None) -> Any:
+    if not payload:
+        return default
+    current: Any = payload
+    for key in path:
+        if not isinstance(current, dict):
+            return default
+        current = current.get(key)
+        if current is None:
+            return default
+    return current
+
+
+# [함수 설명]
+# - 목적: _safe_list 처리 로직을 수행한다.
+# - 입력: payload: dict[str, Any] | None, key: str | None = None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _safe_list(payload: dict[str, Any] | None, key: str | None = None) -> list[dict[str, Any]]:
+    if not payload:
+        return []
+    if key is None:
+        items = payload.get("items", [])
+    else:
+        items = payload.get(key, [])
+    return items if isinstance(items, list) else []
+
+
+# [함수 설명]
+# - 목적: _build_templates 처리 로직을 수행한다.
+# - 입력: business_rules: dict[str, Any] | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _build_templates(business_rules: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not business_rules:
+        return []
+    templates: list[dict[str, Any]] = []
+    for item in business_rules.get("template_suggestions", []):
+        templates.append(
+            {
+                "id": item["template_id"],
+                "source": "business_rules",
+                "confidence": item["confidence"],
+            }
+        )
+    return templates
+
+
+# [함수 설명]
+# - 목적: _build_rules 처리 로직을 수행한다.
+# - 입력: business_rules: dict[str, Any] | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _build_rules(business_rules: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not business_rules:
+        return []
+    rules: list[dict[str, Any]] = []
+    for item in business_rules.get("rules", []):
+        rules.append(
+            {
+                "payload": {
+                    "id": item["id"],
+                    "kind": item["kind"],
+                    "condition": item["condition"],
+                    "action": item["action"],
+                },
+                "sort_key": -item.get("confidence", 0.0),
+                "id": item["id"],
+            }
+        )
+    return rules
+
+
+# [함수 설명]
+# - 목적: _build_recommendations 처리 로직을 수행한다.
+# - 입력: *sources: dict[str, Any] | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _build_recommendations(*sources: dict[str, Any] | None) -> list[dict[str, Any]]:
+    recommendations: dict[str, dict[str, Any]] = {}
+    for source in sources:
+        if not source:
+            continue
+        for item in source.get("recommendations", []):
+            rec_id = item["id"]
+            recommendations.setdefault(rec_id, {"id": rec_id, "message": item["message"]})
+    return list(recommendations.values())
+
+
+# [함수 설명]
+# - 목적: _transaction_spec 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _transaction_spec(
+    transactions: dict[str, Any] | None, tx_boundary: dict[str, Any] | None
+) -> dict[str, Any]:
+    if tx_boundary:
+        summary = tx_boundary.get("summary", {})
+        return {
+            "recommended_boundary": summary.get("recommended_boundary"),
+            "propagation": summary.get("propagation"),
+            "isolation_level": summary.get("isolation_level"),
+        }
+    if transactions:
+        uses_transaction = transactions.get("uses_transaction", False)
+        return {
+            "recommended_boundary": "service" if uses_transaction else "none",
+            "propagation": "REQUIRED" if uses_transaction else "SUPPORTS",
+            "isolation_level": transactions.get("isolation_level"),
+        }
+    return {
+        "recommended_boundary": None,
+        "propagation": None,
+        "isolation_level": None,
+    }
+
+
+# [함수 설명]
+# - 목적: _difficulty_level 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _difficulty_level(
+    mapping_strategy: dict[str, Any] | None, difficulty: dict[str, Any] | None
+) -> str:
+    if difficulty:
+        level = _safe_get(difficulty, ["summary", "difficulty_level"])
+        if level:
+            return level
+    mapping_level = _safe_get(mapping_strategy, ["summary", "difficulty"])
+    return mapping_level or "unknown"
+
+
+# [함수 설명]
+# - 목적: _build_tags 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _build_tags(
+    *,
+    has_writes: bool,
+    uses_transaction: bool,
+    impact_ids: set[str],
+    cyclomatic_complexity: int,
+    linked_servers: list[str],
+    cross_db: list[str],
+    perf_risk_level: str,
+    difficulty_level: str,
+) -> list[str]:
+    tags: list[str] = []
+    tags.append("has_writes" if has_writes else "read_only")
+    tags.append("uses_transaction" if uses_transaction else "no_txn")
+
+    if "IMP_DYN_SQL" in impact_ids:
+        tags.append("dynamic_sql")
+    if "IMP_CURSOR" in impact_ids:
+        tags.append("cursor")
+    if {"IMP_TEMP_TABLE", "IMP_TABLE_VARIABLE"} & impact_ids:
+        tags.append("temp_objects")
+    if "IMP_MERGE" in impact_ids:
+        tags.append("merge")
+
+    if cyclomatic_complexity <= 5:
+        tags.append("low_complexity")
+    elif cyclomatic_complexity >= 12:
+        tags.append("high_complexity")
+
+    if linked_servers:
+        tags.append("linked_server")
+    if cross_db:
+        tags.append("cross_db")
+
+    if perf_risk_level in {"high", "critical"}:
+        tags.append("perf_risk_high")
+    if difficulty_level in {"high", "very_high"}:
+        tags.append("difficulty_high")
+
+    return tags
+
+
+# [함수 설명]
+# - 목적: _one_liner 처리 로직을 수행한다.
+# - 입력: 함수 시그니처 인자
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _one_liner(
+    obj_type: str,
+    has_writes: bool,
+    cyclomatic_complexity: int,
+    approach: str,
+    risk_level: str,
+    difficulty_level: str,
+) -> str:
+    read_phrase = "Read-only" if not has_writes else "Write-enabled"
+    complexity_phrase = "low complexity" if cyclomatic_complexity <= 5 else "moderate complexity"
+    if cyclomatic_complexity >= 12:
+        complexity_phrase = "high complexity"
+
+    approach_phrase = "migration approach undetermined"
+    if approach == "rewrite_to_mybatis_sql":
+        approach_phrase = "safe for MyBatis rewrite"
+    elif approach == "call_sp_first":
+        approach_phrase = "best suited for call-first migration"
+
+    normalized_type = obj_type.lower()
+    return (
+        f"{read_phrase} {normalized_type} with {complexity_phrase}; "
+        f"{approach_phrase}; risk {risk_level}, difficulty {difficulty_level}."
+    )
+
+
+# [함수 설명]
+# - 목적: _linked_servers 처리 로직을 수행한다.
+# - 입력: db_dependency: dict[str, Any] | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _linked_servers(db_dependency: dict[str, Any] | None) -> list[str]:
+    if not db_dependency:
+        return []
+    linked_servers = db_dependency.get("dependencies", {}).get("linked_servers", [])
+    servers = [item["server"] for item in linked_servers if "server" in item]
+    return _sorted_unique(servers)
+
+
+# [함수 설명]
+# - 목적: _cross_db 처리 로직을 수행한다.
+# - 입력: db_dependency: dict[str, Any] | None
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _cross_db(db_dependency: dict[str, Any] | None) -> list[str]:
+    if not db_dependency:
+        return []
+    cross_db = db_dependency.get("dependencies", {}).get("cross_database", [])
+    names = [
+        f"{item['database']}.{item['schema']}.{item['object']}"
+        for item in cross_db
+        if all(key in item for key in ["database", "schema", "object"])
+    ]
+    return _sorted_unique(names)
+
+
+# [함수 설명]
+# - 목적: _normalize_name 처리 로직을 수행한다.
+# - 입력: name: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _normalize_name(name: str) -> str:
+    return name.replace("[", "").replace("]", "").strip().lower()
+
+
+# [함수 설명]
+# - 목적: _sorted_unique 처리 로직을 수행한다.
+# - 입력: items: list[Any]
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _sorted_unique(items: list[Any]) -> list[Any]:
+    seen: set[Any] = set()
+    deduped: list[Any] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        deduped.append(item)
+    return sorted(deduped)
+
+
+# [함수 설명]
+# - 목적: _cap_list 처리 로직을 수행한다.
+# - 입력: items: list[Any], max_items: int, errors: list[str], section_name: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _cap_list(items: list[Any], max_items: int, errors: list[str], section_name: str) -> list[Any]:
+    if max_items <= 0 or len(items) <= max_items:
+        return items
+    errors.append(f"SECTION_TRUNCATED: {section_name}")
+    return items[:max_items]
