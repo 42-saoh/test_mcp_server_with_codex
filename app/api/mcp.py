@@ -12,6 +12,15 @@ from app.services.tsql_analyzer import (
     analyze_transactions,
 )
 from app.services.tsql_business_rules import analyze_business_rules
+from app.services.tsql_call_graph import (
+    Options as ServiceCallGraphOptions,
+)
+from app.services.tsql_call_graph import (
+    SqlObject as ServiceCallGraphObject,
+)
+from app.services.tsql_call_graph import (
+    build_call_graph,
+)
 from app.services.tsql_callers import (
     CallerOptions as ServiceCallerOptions,
 )
@@ -386,6 +395,75 @@ class BusinessRulesResponse(BaseModel):
     errors: list[str]
 
 
+class CallGraphOptions(BaseModel):
+    case_insensitive: bool = True
+    schema_sensitive: bool = False
+    include_functions: bool = True
+    include_procedures: bool = True
+    ignore_dynamic_exec: bool = True
+    max_nodes: int = Field(500, ge=1)
+    max_edges: int = Field(2000, ge=1)
+
+
+class CallGraphObject(BaseModel):
+    name: str
+    type: str
+    sql: str
+
+
+class CallGraphRequest(BaseModel):
+    objects: list[CallGraphObject]
+    options: CallGraphOptions = Field(default_factory=CallGraphOptions)
+
+
+class CallGraphSummary(BaseModel):
+    object_count: int
+    node_count: int
+    edge_count: int
+    has_cycles: bool
+    truncated: bool
+
+
+class CallGraphNode(BaseModel):
+    id: str
+    name: str
+    type: str
+
+
+class CallGraphEdge(BaseModel):
+    from_: str = Field(..., alias="from")
+    to: str
+    kind: str
+    count: int
+    signals: list[str]
+
+
+class CallGraph(BaseModel):
+    nodes: list[CallGraphNode]
+    edges: list[CallGraphEdge]
+
+
+class CallGraphTopology(BaseModel):
+    roots: list[str]
+    leaves: list[str]
+    in_degree: dict[str, int]
+    out_degree: dict[str, int]
+
+
+class CallGraphError(BaseModel):
+    id: str
+    message: str
+    object: str | None = None
+
+
+class CallGraphResponse(BaseModel):
+    version: str
+    summary: CallGraphSummary
+    graph: CallGraph
+    topology: CallGraphTopology
+    errors: list[CallGraphError]
+
+
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     result = analyze_references(request.sql, request.dialect)
@@ -473,6 +551,24 @@ def common_rules_template(request: BusinessRulesRequest) -> BusinessRulesRespons
         signals=result["signals"],
         errors=result["errors"],
     )
+
+
+@router.post("/common/call-graph", response_model=CallGraphResponse)
+def common_call_graph(request: CallGraphRequest) -> CallGraphResponse:
+    service_objects = [
+        ServiceCallGraphObject(name=obj.name, type=obj.type, sql=obj.sql) for obj in request.objects
+    ]
+    service_options = ServiceCallGraphOptions(
+        case_insensitive=request.options.case_insensitive,
+        schema_sensitive=request.options.schema_sensitive,
+        include_functions=request.options.include_functions,
+        include_procedures=request.options.include_procedures,
+        ignore_dynamic_exec=request.options.ignore_dynamic_exec,
+        max_nodes=request.options.max_nodes,
+        max_edges=request.options.max_edges,
+    )
+    result = build_call_graph(service_objects, service_options)
+    return CallGraphResponse(**result)
 
 
 def _infer_target_type(target: str, target_type: str | None) -> str:
