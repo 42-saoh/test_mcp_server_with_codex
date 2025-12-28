@@ -1,10 +1,21 @@
 from __future__ import annotations
 
+import hashlib
+import logging
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, model_validator
 
+from app.services.rag_lexical import (
+    build_index,
+    build_pattern_recommendations,
+    build_snippet,
+    extract_query_terms,
+    load_documents,
+    search,
+)
 from app.services.tsql_analyzer import (
     analyze_control_flow,
     analyze_data_changes,
@@ -43,6 +54,8 @@ from app.services.tsql_standardization_spec import (
 )
 from app.services.tsql_standardization_spec import build_standardization_spec
 from app.services.tsql_tx_boundary import recommend_transaction_boundary
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -282,6 +295,48 @@ class StandardizeSpecResponse(BaseModel):
     version: str
     object: StandardizeSpecObjectResponse
     spec: StandardizeSpecPayload
+    errors: list[str]
+
+
+class StandardizeSpecWithEvidenceOptions(StandardizeSpecOptions):
+    docs_dir: str = "data/standard_docs"
+    top_k: int = 5
+    max_snippet_chars: int = 280
+
+
+class StandardizeSpecWithEvidenceRequest(BaseModel):
+    object: StandardizeSpecObject
+    sql: str
+    options: StandardizeSpecWithEvidenceOptions = Field(
+        default_factory=StandardizeSpecWithEvidenceOptions
+    )
+
+
+class StandardizeSpecEvidenceDocument(BaseModel):
+    doc_id: str
+    title: str
+    source: str
+    score: float
+    snippet: str
+
+
+class StandardizeSpecPatternRecommendation(BaseModel):
+    id: str
+    message: str
+    source_doc_id: str | None
+
+
+class StandardizeSpecWithEvidencePayload(BaseModel):
+    query_terms: list[str]
+    documents: list[StandardizeSpecEvidenceDocument]
+    pattern_recommendations: list[StandardizeSpecPatternRecommendation]
+
+
+class StandardizeSpecWithEvidenceResponse(BaseModel):
+    version: str
+    object: StandardizeSpecObjectResponse
+    spec: StandardizeSpecPayload
+    evidence: StandardizeSpecWithEvidencePayload
     errors: list[str]
 
 
@@ -1023,6 +1078,104 @@ def standardize_spec(request: StandardizeSpecRequest) -> StandardizeSpecResponse
     return StandardizeSpecResponse(**result)
 
 
+@router.post("/standardize/spec-with-evidence", response_model=StandardizeSpecWithEvidenceResponse)
+def standardize_spec_with_evidence(
+    request: StandardizeSpecWithEvidenceRequest,
+) -> StandardizeSpecWithEvidenceResponse:
+    options = ServiceStandardizationOptions(
+        dialect=request.options.dialect,
+        case_insensitive=request.options.case_insensitive,
+        include_sections=request.options.include_sections,
+        max_items_per_section=request.options.max_items_per_section,
+    )
+    errors: list[str] = []
+    try:
+        spec_result = build_standardization_spec(
+            request.object.name,
+            request.object.type,
+            request.sql,
+            None,
+            options,
+        )
+    except Exception:
+        errors.append("SECTION_NOT_AVAILABLE: standardize_spec")
+        spec_result = _empty_standardize_spec(
+            request.object.name,
+            request.object.type,
+        )
+
+    object_payload = spec_result.get("object", {})
+    spec_payload = spec_result.get("spec", _empty_spec_payload())
+    errors.extend(spec_result.get("errors", []))
+
+    sql_hash = hashlib.sha256(request.sql.encode("utf-8")).hexdigest()[:8]
+    logger.info(
+        "standardize_spec_with_evidence: sql_len=%s sql_hash=%s docs_dir=%s",
+        len(request.sql),
+        sql_hash,
+        request.options.docs_dir,
+    )
+
+    documents: list[StandardizeSpecEvidenceDocument] = []
+    query_terms = extract_query_terms(spec_payload)
+    evidence_errors: list[str] = []
+    hits = []
+    docs_path = Path(request.options.docs_dir)
+    if not docs_path.exists():
+        evidence_errors.append(f"DOCS_DIR_NOT_FOUND: {request.options.docs_dir}")
+    else:
+        chunks = load_documents(request.options.docs_dir)
+        if not chunks:
+            evidence_errors.append(f"DOCS_EMPTY: {request.options.docs_dir}")
+        else:
+            logger.info(
+                "standardize_spec_with_evidence: indexed_chunks=%s",
+                len(chunks),
+            )
+            index = build_index(chunks, case_insensitive=request.options.case_insensitive)
+            query = " ".join(query_terms)
+            hits = search(index, query, request.options.top_k)
+            for hit in hits:
+                snippet, truncated = build_snippet(hit.text, request.options.max_snippet_chars)
+                documents.append(
+                    StandardizeSpecEvidenceDocument(
+                        doc_id=hit.doc_id,
+                        title=hit.title,
+                        source=hit.source,
+                        score=round(hit.score, 6),
+                        snippet=snippet,
+                    )
+                )
+                if truncated:
+                    evidence_errors.append(f"SNIPPET_TRUNCATED: {hit.doc_id}")
+
+    if not query_terms:
+        evidence_errors.append("QUERY_TERMS_EMPTY")
+
+    pattern_recommendations = build_pattern_recommendations(spec_payload, hits)
+    errors.extend(evidence_errors)
+
+    return StandardizeSpecWithEvidenceResponse(
+        version="5.2.0",
+        object=StandardizeSpecObjectResponse(
+            name=object_payload.get("name", request.object.name),
+            type=object_payload.get("type", request.object.type),
+            normalized=object_payload.get(
+                "normalized", _normalize_object_name(request.object.name)
+            ),
+        ),
+        spec=StandardizeSpecPayload(**spec_payload),
+        evidence=StandardizeSpecWithEvidencePayload(
+            query_terms=query_terms,
+            documents=documents,
+            pattern_recommendations=[
+                StandardizeSpecPatternRecommendation(**item) for item in pattern_recommendations
+            ],
+        ),
+        errors=sorted(set(errors)),
+    )
+
+
 @router.post("/callers", response_model=CallersResponse)
 def callers(request: CallersRequest) -> CallersResponse:
     target_type = _infer_target_type(request.target, request.target_type)
@@ -1257,6 +1410,42 @@ def quality_db_dependency(request: DbDependencyRequest) -> DbDependencyResponse:
         recommendations=[DbDependencyRecommendation(**item) for item in result["recommendations"]],
         errors=result["errors"],
     )
+
+
+def _empty_standardize_spec(name: str, obj_type: str) -> dict[str, object]:
+    return {
+        "version": "5.1.0",
+        "object": {"name": name, "type": obj_type, "normalized": _normalize_object_name(name)},
+        "spec": _empty_spec_payload(),
+        "errors": ["SECTION_NOT_AVAILABLE: standardize_spec"],
+    }
+
+
+def _empty_spec_payload() -> dict[str, object]:
+    return {
+        "tags": [],
+        "summary": {
+            "one_liner": "Spec unavailable.",
+            "risk_level": "unknown",
+            "difficulty_level": "unknown",
+        },
+        "templates": [],
+        "rules": [],
+        "dependencies": {"tables": [], "functions": [], "cross_db": [], "linked_servers": []},
+        "transactions": {
+            "recommended_boundary": None,
+            "propagation": None,
+            "isolation_level": None,
+        },
+        "mybatis": {"approach": "unknown", "difficulty_score": None},
+        "risks": {"migration_impacts": [], "performance": [], "db_dependency": []},
+        "recommendations": [],
+        "evidence": {"signals": {}},
+    }
+
+
+def _normalize_object_name(name: str) -> str:
+    return name.replace("[", "").replace("]", "").strip().lower()
 
 
 def _infer_target_type(target: str, target_type: str | None) -> str:
