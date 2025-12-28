@@ -17,7 +17,6 @@ VS Code에서 GitHub Copilot과 연동하여 SP/FN 분석 결과, 변환 가이�
 
 ### 2) 공통 기능 후보 판별
 - 해당 SP/FN을 호출하는 다른 SP/FN 존재 여부 및 호출 수 확인
-- 외부 의존성 패턴 감지 (linked server, cross-DB, OPENQUERY/OPENDATASOURCE, EXEC AT, CLR/xp_cmdshell)
 - 재사용/확장 가능성(유틸화 가능성) 평가
 - 비즈니스 규칙 추출 및 표준 템플릿 매핑
 - 호출 그래프(Call Graph) 생성
