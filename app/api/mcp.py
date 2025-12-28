@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.services.tsql_analyzer import (
     analyze_control_flow,
@@ -38,6 +38,10 @@ from app.services.tsql_mapping_strategy import recommend_mapping_strategy
 from app.services.tsql_mybatis_difficulty import evaluate_mybatis_difficulty
 from app.services.tsql_performance_risk import analyze_performance_risk
 from app.services.tsql_reusability import evaluate_reusability
+from app.services.tsql_standardization_spec import (
+    Options as ServiceStandardizationOptions,
+)
+from app.services.tsql_standardization_spec import build_standardization_spec
 from app.services.tsql_tx_boundary import recommend_transaction_boundary
 
 router = APIRouter()
@@ -173,6 +177,111 @@ class AnalyzeResponse(BaseModel):
     control_flow: ControlFlow
     data_changes: DataChanges
     error_handling: ErrorHandling
+    errors: list[str]
+
+
+class StandardizeSpecObject(BaseModel):
+    name: str
+    type: str
+
+
+class StandardizeSpecOptions(BaseModel):
+    dialect: str = "tsql"
+    case_insensitive: bool = True
+    include_sections: list[str] | None = None
+    max_items_per_section: int = 50
+
+
+class StandardizeSpecRequest(BaseModel):
+    object: StandardizeSpecObject
+    sql: str | None = None
+    inputs: dict[str, dict[str, object]] | None = None
+    options: StandardizeSpecOptions = Field(default_factory=StandardizeSpecOptions)
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> StandardizeSpecRequest:
+        if self.sql and self.inputs:
+            raise ValueError("Provide either sql or inputs, not both.")
+        if not self.sql and not self.inputs:
+            raise ValueError("Provide sql or inputs.")
+        return self
+
+
+class StandardizeSpecObjectResponse(BaseModel):
+    name: str
+    type: str
+    normalized: str
+
+
+class StandardizeSpecSummary(BaseModel):
+    one_liner: str
+    risk_level: str
+    difficulty_level: str
+
+
+class StandardizeSpecTemplate(BaseModel):
+    id: str
+    source: str
+    confidence: float
+
+
+class StandardizeSpecRule(BaseModel):
+    id: str
+    kind: str
+    condition: str
+    action: str
+
+
+class StandardizeSpecDependencies(BaseModel):
+    tables: list[str]
+    functions: list[str]
+    cross_db: list[str]
+    linked_servers: list[str]
+
+
+class StandardizeSpecTransactions(BaseModel):
+    recommended_boundary: str | None
+    propagation: str | None
+    isolation_level: str | None
+
+
+class StandardizeSpecMyBatis(BaseModel):
+    approach: str
+    difficulty_score: int | None
+
+
+class StandardizeSpecRisks(BaseModel):
+    migration_impacts: list[str]
+    performance: list[str]
+    db_dependency: list[str]
+
+
+class StandardizeSpecRecommendation(BaseModel):
+    id: str
+    message: str
+
+
+class StandardizeSpecEvidence(BaseModel):
+    signals: dict[str, object]
+
+
+class StandardizeSpecPayload(BaseModel):
+    tags: list[str]
+    summary: StandardizeSpecSummary
+    templates: list[StandardizeSpecTemplate]
+    rules: list[StandardizeSpecRule]
+    dependencies: StandardizeSpecDependencies
+    transactions: StandardizeSpecTransactions
+    mybatis: StandardizeSpecMyBatis
+    risks: StandardizeSpecRisks
+    recommendations: list[StandardizeSpecRecommendation]
+    evidence: StandardizeSpecEvidence
+
+
+class StandardizeSpecResponse(BaseModel):
+    version: str
+    object: StandardizeSpecObjectResponse
+    spec: StandardizeSpecPayload
     errors: list[str]
 
 
@@ -894,6 +1003,24 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
         error_handling=ErrorHandling(**error_handling),
         errors=errors,
     )
+
+
+@router.post("/standardize/spec", response_model=StandardizeSpecResponse)
+def standardize_spec(request: StandardizeSpecRequest) -> StandardizeSpecResponse:
+    options = ServiceStandardizationOptions(
+        dialect=request.options.dialect,
+        case_insensitive=request.options.case_insensitive,
+        include_sections=request.options.include_sections,
+        max_items_per_section=request.options.max_items_per_section,
+    )
+    result = build_standardization_spec(
+        request.object.name,
+        request.object.type,
+        request.sql,
+        request.inputs,
+        options,
+    )
+    return StandardizeSpecResponse(**result)
 
 
 @router.post("/callers", response_model=CallersResponse)
