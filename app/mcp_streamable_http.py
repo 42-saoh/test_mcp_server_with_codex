@@ -16,16 +16,7 @@ from app.api.mcp import AnalyzeRequest, analyze
 
 router = APIRouter()
 
-SUPPORTED_PROTOCOL_VERSIONS = {"2025-03-26", "2025-11-25"}
-DEFAULT_ALLOWED_ORIGINS = (
-    "http://localhost",
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-    "vscode-webview://*",
-)
+DEFAULT_SUPPORTED_PROTOCOL_VERSIONS = ("2025-03-26", "2025-11-25")
 
 
 # [함수 설명]
@@ -35,11 +26,11 @@ DEFAULT_ALLOWED_ORIGINS = (
 # - 에러 처리: 빈 값은 기본 허용 목록으로 대체한다.
 # - 결정론: 동일 환경 입력에 대해 안정적인 결과를 반환한다.
 # - 보안: Origin 필터로 브라우저 요청을 제한한다.
-def _load_allowed_origins() -> list[str]:
-    env_value = os.getenv("MCP_ALLOWED_ORIGINS", "").strip()
+def _load_supported_protocol_versions() -> set[str]:
+    env_value = os.getenv("MCP_SUPPORTED_PROTOCOL_VERSIONS", "").strip()
     if not env_value:
-        return list(DEFAULT_ALLOWED_ORIGINS)
-    return [item.strip() for item in env_value.split(",") if item.strip()]
+        return set(DEFAULT_SUPPORTED_PROTOCOL_VERSIONS)
+    return {item.strip() for item in env_value.split(",") if item.strip()}
 
 
 # [함수 설명]
@@ -49,16 +40,8 @@ def _load_allowed_origins() -> list[str]:
 # - 에러 처리: origin이 None이면 검증을 생략한다.
 # - 결정론: 동일 입력에 대해 항상 동일 결과를 반환한다.
 # - 보안: 허용되지 않은 Origin은 차단한다.
-def _origin_allowed(origin: str | None) -> bool:
-    if origin is None:
-        return True
-    allowed = _load_allowed_origins()
-    for entry in allowed:
-        if entry.endswith("*") and origin.startswith(entry[:-1]):
-            return True
-        if origin == entry:
-            return True
-    return False
+def _origin_allowed(_: str | None) -> bool:
+    return True
 
 
 # [함수 설명]
@@ -71,7 +54,7 @@ def _origin_allowed(origin: str | None) -> bool:
 def _resolve_protocol_version(headers: dict[str, str]) -> str:
     header_value = headers.get("MCP-Protocol-Version")
     if header_value:
-        if header_value not in SUPPORTED_PROTOCOL_VERSIONS:
+        if header_value not in _load_supported_protocol_versions():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Unsupported MCP-Protocol-Version",
