@@ -82,3 +82,41 @@ curl -X POST http://localhost:9700/mcp/migration/mapping-strategy \
 
 ---
 
+## VS Code MCP (HTTP)
+
+### VS Code 설정 예시 (.vscode/mcp.json)
+
+```json
+{
+  "servers": {
+    "mssql-migration": {
+      "type": "http",
+      "url": "http://localhost:9700/mcp"
+    }
+  }
+}
+```
+
+### 실행 방법
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 9700
+```
+
+### Handshake expectations
+
+1. `initialize` (JSON-RPC request)
+2. `notifications/initialized` (JSON-RPC notification)
+3. `tools/list`
+4. `tools/call`
+
+### MCP tools
+
+#### `tsql.analyze`
+- 설명: T-SQL을 분석하여 참조/트랜잭션/제어 흐름/마이그레이션 영향 등을 반환한다.
+- Input schema 요약:
+  - `sql` (string, required): 분석 대상 T-SQL
+  - `dialect` (string, optional, default: `tsql`)
+- Output 요약:
+  - `references`, `transactions`, `migration_impacts`, `control_flow`, `data_changes`, `error_handling`, `errors`
+
