@@ -11,11 +11,6 @@ sqlglot>=25
 networkx>=3
 pyodbc>=5
 
-# --- RAG (현재 프로젝트 구성 유지: LangChain + FAISS) ---
+# --- 로컬 문서 기반 evidence 검색(오프라인/결정론) ---
 python-dotenv
 openai
-langchain
-langchain-openai
-langchain-community
-faiss-cpu
-pypdf

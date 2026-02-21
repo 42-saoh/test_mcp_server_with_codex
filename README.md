@@ -1,7 +1,7 @@
 # MSSQL Migration MCP Server (Python)
 
 MSSQL Stored Procedure / Function을 분석하고, Java + Spring Boot + MyBatis 마이그레이션을 표준화/자동화하기 위한 **MCP(Model Context Protocol) 서버**입니다.  
-VS Code에서 GitHub Copilot과 연동하여 SP/FN 분석 결과, 변환 가이드, RAG 기반 참고 자료를 툴 형태로 제공하는 것을 목표로 합니다.
+VS Code에서 GitHub Copilot과 연동하여 SP/FN 분석 결과, 변환 가이드, 로컬 문서 기반 evidence를 툴 형태로 제공하는 것을 목표로 합니다.
 
 ---
 
@@ -31,9 +31,10 @@ VS Code에서 GitHub Copilot과 연동하여 SP/FN 분석 결과, 변환 가이�
 - 성능 리스크 탐지
 - DB 의존도 점수
 
-### 5) RAG 기반 표준화(옵션)
-- 사내 표준 문서/가이드, 변환 규칙, 예제 코드 등을 인덱싱
-- 분석 결과와 함께 근거 문서/권장 패턴을 함께 반환
+### 5) 로컬 문서 기반 표준화(옵션)
+- `docs_dir` 하위의 md/txt 문서를 로드해 in-memory lexical index를 구성
+- `top_k`, `max_snippet_chars` 옵션으로 근거 문서/스니펫 반환 범위를 제어
+- 외부 네트워크/벡터 임베딩 없이 결정론적으로 동작
 
 ---
 
@@ -72,8 +73,13 @@ curl -X POST http://localhost:9700/mcp/analyze \
 ```bash
 curl -X POST http://localhost:9700/mcp/standardize/spec-with-evidence \
   -H "Content-Type: application/json" \
-  -d '{"object":{"name":"dbo.usp_Name","type":"procedure"},"sql":"<SQL_PLACEHOLDER>","options":{"docs_dir":"data/standard_docs","top_k":3}}'
+  -d '{"object":{"name":"dbo.usp_Name","type":"procedure"},"sql":"<SQL_PLACEHOLDER>","options":{"docs_dir":"data/standard_docs","top_k":3,"max_snippet_chars":280}}'
 ```
+
+`spec-with-evidence` 주요 옵션:
+- `docs_dir`: 로컬 md/txt 표준 문서 디렉터리
+- `top_k`: 반환할 상위 근거 개수
+- `max_snippet_chars`: 스니펫 최대 길이
 
 ```bash
 curl -X POST http://localhost:9700/mcp/migration/mapping-strategy \

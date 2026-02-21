@@ -161,3 +161,20 @@ def test_standardize_spec_with_evidence_top_k_zero_skips_documents(tmp_path) -> 
     assert "PAT_MYBATIS_DYNAMIC_TAGS" in {
         item["id"] for item in payload["evidence"]["pattern_recommendations"]
     }
+
+
+def test_standardize_spec_with_evidence_default_docs_dir_error() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/mcp/standardize/spec-with-evidence",
+        json={
+            "object": {"name": "dbo.usp_Sample", "type": "procedure"},
+            "sql": "CREATE PROCEDURE dbo.usp_Sample AS SELECT 1;",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["evidence"]["documents"] == []
+    assert any("DOCS_DIR_NOT_FOUND" in err for err in payload["errors"])

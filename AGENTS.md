@@ -102,13 +102,14 @@ Suggested minimum tests:
 
 ---
 
-## 6) RAG / FAISS guidance
+## 6) Evidence retrieval (lexical / local docs)
 
-- Store vector index path under an environment variable (e.g. `FAISS_PATH`) and default safely.
-- Code must handle “index missing” gracefully (create, or return a clear error).
+- `spec-with-evidence` must work with local docs only (`docs_dir`).
+- Supported document types are `.md` and `.txt`.
+- Retrieval is in-memory lexical indexing/search (deterministic, offline).
+- Respect options: `docs_dir`, `top_k`, `max_snippet_chars`.
+- Missing docs directory must be handled gracefully with a clear error id (e.g., `DOCS_DIR_NOT_FOUND`).
 - Do not embed large binary indices into git.
-
----
 
 ## 7) Security & secrets
 

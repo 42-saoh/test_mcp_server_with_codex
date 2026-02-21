@@ -9,7 +9,6 @@ WORKDIR ${APP_HOME}
 
 # --- OS 패키지 ---
 # - pyodbc + SQL Server 접속: unixODBC + msodbcsql18
-# - faiss-cpu: libgomp1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
@@ -18,7 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     unixodbc \
     unixodbc-dev \
-    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Microsoft ODBC Driver 18 for SQL Server
@@ -39,7 +37,7 @@ COPY app ./app
 COPY standards ./standards
 
 # 런타임 디렉토리 (볼륨 마운트가 덮어쓸 수 있음)
-RUN mkdir -p /data/faiss /app/logs
+RUN mkdir -p /app/logs
 
 # MCP HTTP(=streamable-http) 기본 포트
 EXPOSE 9700
