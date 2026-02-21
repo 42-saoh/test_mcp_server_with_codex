@@ -193,7 +193,7 @@ def analyze_references(sql: str, dialect: str = "tsql") -> dict[str, object]:
         references["tables"] = _sorted_unique(parsed_tables + fallback["tables"])
         references["functions"] = _sorted_unique(parsed_functions + fallback["functions"])
     except Exception as exc:  # pragma: no cover - narrow to parse failure
-        errors.append(f"parse_error: {exc}")
+        errors.append(_safe_parse_error(exc))
         references = _fallback_references(sql)
 
     return {"references": references, "errors": errors}
@@ -576,7 +576,7 @@ def analyze_control_flow(sql: str, dialect: str = "tsql") -> dict[str, object]:
             1 for expression in expressions for _ in expression.find_all(exp.Return)
         )
     except Exception as exc:  # pragma: no cover - fallback for parse failure
-        errors.append(f"parse_error: {exc}")
+        errors.append(_safe_parse_error(exc))
 
     tokens = _scan_control_flow_tokens(sql)
     label_count = len(CONTROL_FLOW_LABEL_PATTERN.findall(sql))
@@ -696,7 +696,7 @@ def analyze_data_changes(sql: str, dialect: str = "tsql") -> dict[str, object]:
                         target = _table_name_from_expression(into_expr)
                     add_operation("select_into", target)
     except Exception as exc:  # pragma: no cover - parse failure fallback
-        errors.append(f"parse_error: {exc}")
+        errors.append(_safe_parse_error(exc))
         parse_failed = True
 
     fallback_ops = _fallback_data_changes(sql)
@@ -976,6 +976,17 @@ def _function_name(node: exp.Expression) -> str | None:
         return None
 
     return name.split(".")[-1]
+
+
+# [함수 설명]
+# - 목적: _safe_parse_error 처리 로직을 수행한다.
+# - 입력: exc: Exception
+# - 출력: raw SQL이 포함되지 않은 파서 오류 식별 문자열을 반환한다.
+# - 에러 처리: 예외 클래스명만 사용해 민감한 원문 노출을 방지한다.
+# - 결정론: 동일 예외 타입에서 동일 문자열을 반환한다.
+# - 보안: 예외 메시지의 SQL 스니펫 노출을 차단한다.
+def _safe_parse_error(exc: Exception) -> str:
+    return f"parse_error: {exc.__class__.__name__}"
 
 
 # [함수 설명]

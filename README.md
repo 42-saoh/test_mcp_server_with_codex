@@ -59,6 +59,7 @@ VS Code에서 GitHub Copilot과 연동하여 SP/FN 분석 결과, 변환 가이�
 - Offline only (no network, no DB, no API keys required for tests).
 - No raw SQL is returned in API responses.
 - Deterministic outputs for identical inputs (ordering and truncation are stable).
+- Parser failures return `parse_error: <ExceptionClass>` (exception message text is redacted).
 
 ### Example curl
 
@@ -119,4 +120,3 @@ uvicorn app.main:app --host 0.0.0.0 --port 9700
   - `dialect` (string, optional, default: `tsql`)
 - Output 요약:
   - `references`, `transactions`, `migration_impacts`, `control_flow`, `data_changes`, `error_handling`, `errors`
-

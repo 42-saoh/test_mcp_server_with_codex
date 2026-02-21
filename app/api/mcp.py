@@ -1824,6 +1824,7 @@ def standardize_spec_with_evidence(
     query_terms = extract_query_terms(spec_payload)
     evidence_errors: list[str] = []
     hits = []
+    should_retrieve = bool(query_terms) and request.options.top_k > 0
     docs_path = Path(request.options.docs_dir)
     if not docs_path.exists():
         evidence_errors.append(f"DOCS_DIR_NOT_FOUND: {request.options.docs_dir}")
@@ -1836,22 +1837,23 @@ def standardize_spec_with_evidence(
                 "standardize_spec_with_evidence: indexed_chunks=%s",
                 len(chunks),
             )
-            index = build_index(chunks, case_insensitive=request.options.case_insensitive)
-            query = " ".join(query_terms)
-            hits = search(index, query, request.options.top_k)
-            for hit in hits:
-                snippet, truncated = build_snippet(hit.text, request.options.max_snippet_chars)
-                documents.append(
-                    StandardizeSpecEvidenceDocument(
-                        doc_id=hit.doc_id,
-                        title=hit.title,
-                        source=hit.source,
-                        score=round(hit.score, 6),
-                        snippet=snippet,
+            if should_retrieve:
+                index = build_index(chunks, case_insensitive=request.options.case_insensitive)
+                query = " ".join(query_terms)
+                hits = search(index, query, request.options.top_k)
+                for hit in hits:
+                    snippet, truncated = build_snippet(hit.text, request.options.max_snippet_chars)
+                    documents.append(
+                        StandardizeSpecEvidenceDocument(
+                            doc_id=hit.doc_id,
+                            title=hit.title,
+                            source=hit.source,
+                            score=round(hit.score, 6),
+                            snippet=snippet,
+                        )
                     )
-                )
-                if truncated:
-                    evidence_errors.append(f"SNIPPET_TRUNCATED: {hit.doc_id}")
+                    if truncated:
+                        evidence_errors.append(f"SNIPPET_TRUNCATED: {hit.doc_id}")
 
     if not query_terms:
         evidence_errors.append("QUERY_TERMS_EMPTY")

@@ -72,6 +72,7 @@
   - `control_flow.graph`는 `CONTROL_FLOW_NODE_LIMIT(200)`, `CONTROL_FLOW_EDGE_LIMIT(400)` 초과 시 `errors`에 `control_flow_graph_truncated`를 기록.
   - `data_changes.table_operations`는 테이블명 기준 정렬.
 - **안전 규칙**: 원문 SQL 미포함(응답/로그 모두). 로그는 `summarize_sql` 요약만 기록.
+  - 파서 예외는 `parse_error: <ExceptionClass>`만 반환하며, 예외 원문 메시지는 노출하지 않는다.
 - **예시 요청/응답**
 
 ```json
@@ -224,7 +225,7 @@
 
 | Field | Type | Required | Description | Notes |
 | --- | --- | --- | --- | --- |
-| version | string | required | 응답 버전 | `"1.2.0"` |
+| version | string | required | 응답 버전 | `"2.2.0"` |
 | object | object | required | 대상 정보 | `ReusabilityObject` 모델 참조 |
 | summary | object | required | 요약 | `ReusabilitySummary` 모델 참조 |
 | signals | object | required | 판단 신호 | `ReusabilitySignals` 모델 참조 |
@@ -505,7 +506,7 @@
 - **입력/출력 요약**
   - 입력: `sql: str`, `dialect: str = "tsql"`.
   - 출력: `dict` 기반 결과(각 엔드포인트의 Pydantic 모델에 매핑).
-- **에러 처리**: 파서 실패 시 `errors`에 `parse_error` 기록 후 fallback 정규식 분석.
+- **에러 처리**: 파서 실패 시 `errors`에 `parse_error: <ExceptionClass>` 형식으로 기록 후 fallback 정규식 분석.
 - **결정론/캡 규칙**
   - 참조/신호/리스트는 정렬/중복 제거.
   - 제어 흐름 그래프는 노드/엣지 제한(`CONTROL_FLOW_NODE_LIMIT`, `CONTROL_FLOW_EDGE_LIMIT`) 적용.
