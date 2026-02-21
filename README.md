@@ -73,7 +73,7 @@ curl -X POST http://localhost:9700/mcp/analyze \
 ```bash
 curl -X POST http://localhost:9700/mcp/standardize/spec-with-evidence \
   -H "Content-Type: application/json" \
-  -d '{"object":{"name":"dbo.usp_Name","type":"procedure"},"sql":"<SQL_PLACEHOLDER>","options":{"docs_dir":"data/standard_docs","top_k":3,"max_snippet_chars":280}}'
+  -d '{"object":{"name":"dbo.usp_Name","type":"procedure"},"sql":"<SQL_PLACEHOLDER>","options":{"docs_dir":"standards","top_k":3,"max_snippet_chars":280}}'
 ```
 
 `spec-with-evidence` 주요 옵션:

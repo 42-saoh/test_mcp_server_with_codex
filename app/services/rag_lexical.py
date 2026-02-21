@@ -16,6 +16,11 @@ from typing import Any
 
 TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
 SUPPORTED_EXTENSIONS = {".md", ".txt"}
+GENERIC_QUERY_TERMS = {
+    "read_only",
+    "no_txn",
+    "low_complexity",
+}
 
 
 # [클래스 설명]
@@ -193,8 +198,15 @@ def extract_query_terms(spec: dict[str, Any]) -> list[str]:
         for item in risks.get(key, []):
             terms.append(str(item))
 
-    normalized = [_normalize_term(term) for term in terms]
-    return _sorted_unique(normalized)[:30]
+    expanded: list[str] = []
+    for term in terms:
+        normalized = _normalize_term(term)
+        if not normalized or normalized in GENERIC_QUERY_TERMS:
+            continue
+        expanded.append(normalized)
+        expanded.extend(_split_query_term(normalized))
+
+    return _sorted_unique(expanded)[:30]
 
 
 # [함수 설명]
@@ -439,6 +451,18 @@ def _chunk_plaintext(text: str) -> list[str]:
 def _normalize_term(term: str) -> str:
     normalized = term.strip().lower()
     return normalized
+
+
+# [함수 설명]
+# - 목적: _split_query_term 처리 로직을 수행한다.
+# - 입력: term: str
+# - 출력: 구조화된 dict 결과를 반환한다.
+# - 에러 처리: 예외 발생 시 errors/notes에 기록하거나 안전한 기본값을 사용한다.
+# - 결정론: 정렬/중복 제거/최대 개수 제한을 통해 결과 순서를 안정화한다.
+# - 보안: 원문 SQL 등 민감 정보는 로그에 직접 남기지 않도록 요약한다.
+def _split_query_term(term: str) -> list[str]:
+    tokens = [piece for piece in re.split(r"[_\-.]+", term) if piece]
+    return [token for token in tokens if len(token) > 1]
 
 
 # [함수 설명]
