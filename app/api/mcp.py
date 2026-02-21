@@ -483,7 +483,7 @@ class StandardizeSpecResponse(BaseModel):
 # - 핵심 동작: 필드 타입과 검증 규칙을 통해 데이터 구조를 고정한다.
 # - 제약/주의: 동작 로직보다 스키마 표현에 집중하며 결정론적 직렬화를 전제로 한다.
 class StandardizeSpecWithEvidenceOptions(StandardizeSpecOptions):
-    docs_dir: str = "data/standard_docs"
+    docs_dir: str = "standards"
     top_k: int = 5
     max_snippet_chars: int = 280
 

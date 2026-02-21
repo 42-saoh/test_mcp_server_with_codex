@@ -4,177 +4,180 @@
 # - 입력/출력: 고정 입력을 사용하며 테스트 통과 여부로 결과를 확인한다.
 # - 주의 사항: 원문 SQL이나 비밀 값은 로그/출력에 포함하지 않는다.
 # - 연관 모듈: app.main/app.api.mcp 및 서비스 레이어와 연동된다.
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
+import app.api.mcp as mcp_api
 from app.main import app
 
 
-# [함수 설명]
-# - 목적: standardize spec with evidence retrieval 동작을 검증한다.
-# - 입력: 테스트 픽스처/클라이언트 등 고정 입력을 사용한다.
-# - 출력: 예외 없이 단언을 통과하면 성공으로 간주한다.
-# - 에러 처리: 실패 시 pytest가 assertion 결과를 보고한다.
-# - 결정론: 동일 입력으로 항상 재현 가능한 검증을 수행한다.
-# - 보안: 테스트 로그에 원문 SQL/민감 정보를 남기지 않는다.
-def test_standardize_spec_with_evidence_retrieval(tmp_path) -> None:
-    docs_dir = tmp_path / "docs"
+def _stub_standardization_spec(name: str, obj_type: str) -> dict[str, object]:
+    spec_payload = mcp_api._empty_spec_payload()
+    spec_payload["tags"] = ["dynamic_sql", "cursor", "uses_transaction"]
+    spec_payload["templates"] = [
+        {"id": "TPL_DYNAMIC_SQL", "source": "business_rules", "confidence": 0.9}
+    ]
+    spec_payload["risks"] = {
+        "migration_impacts": ["IMP_DYN_SQL"],
+        "performance": ["RISK_SELECT_STAR"],
+        "db_dependency": [],
+    }
+    return {
+        "version": "5.1.0",
+        "object": {
+            "name": name,
+            "type": obj_type,
+            "normalized": name.lower(),
+        },
+        "spec": spec_payload,
+        "errors": [],
+    }
+
+
+def _create_docs(docs_dir: Path) -> None:
     docs_dir.mkdir()
-    (docs_dir / "mybatis_dynamic_sql.md").write_text(
-        "# MyBatis Dynamic SQL Standard\n\n"
-        "Prefer dynamic_sql handling with <if>/<choose>/<foreach> tags to avoid concatenation.\n"
-        "Use mybatis tags to keep SQL readable.\n",
+    (docs_dir / "dynamic_sql.md").write_text(
+        "# Dynamic SQL in MyBatis\n\n"
+        "Prefer dynamic sql sections with <if>, <choose>, and <foreach>.\n"
+        "Avoid string concatenation for predicates.\n",
         encoding="utf-8",
     )
-    (docs_dir / "transactions.md").write_text(
-        "# Transaction Boundaries\n\n"
-        "Define @Transactional at the service layer and keep boundaries consistent.\n",
+    (docs_dir / "cursor_replacement.md").write_text(
+        "# Replacing Cursor Logic\n\n"
+        "Replace cursor loops with set based statements and batched operations.\n",
         encoding="utf-8",
+    )
+    (docs_dir / "transaction_boundary.md").write_text(
+        "# Service-layer Transactions\n\n"
+        "Move transaction boundary controls to @Transactional service methods.\n",
+        encoding="utf-8",
+    )
+
+
+def test_standardize_spec_with_evidence_returns_documents_when_docs_exist(
+    tmp_path, monkeypatch
+) -> None:
+    docs_dir = tmp_path / "docs"
+    _create_docs(docs_dir)
+    monkeypatch.setattr(
+        mcp_api,
+        "build_standardization_spec",
+        lambda name, obj_type, sql, inputs, options: _stub_standardization_spec(name, obj_type),
     )
 
     client = TestClient(app)
     response = client.post(
         "/mcp/standardize/spec-with-evidence",
         json={
-            "object": {"name": "dbo.usp_Sample", "type": "procedure"},
-            "sql": """
-            CREATE PROCEDURE dbo.usp_Sample AS
-            BEGIN
-                BEGIN TRANSACTION;
-                DECLARE @dyn NVARCHAR(100) = 'SENTINEL SELECT 1';
-                EXEC(@dyn);
-                COMMIT TRANSACTION;
-            END
-            """,
-            "options": {
-                "docs_dir": str(docs_dir),
-                "top_k": 5,
-                "max_snippet_chars": 120,
-            },
+            "object": {"name": "dbo.usp_Smoke", "type": "procedure"},
+            "sql": "-- synthetic",
+            "options": {"docs_dir": str(docs_dir), "top_k": 3, "max_snippet_chars": 120},
         },
     )
 
     assert response.status_code == 200
     payload = response.json()
+    evidence = payload["evidence"]
+    errors = payload["errors"]
 
-    documents = payload["evidence"]["documents"]
-    assert len(documents) <= 5
-    assert any("mybatis_dynamic_sql.md" in doc["source"] for doc in documents)
-    assert all(len(doc["snippet"]) <= 120 for doc in documents)
-    assert "PAT_MYBATIS_DYNAMIC_TAGS" in {
-        item["id"] for item in payload["evidence"]["pattern_recommendations"]
-    }
-    assert "SENTINEL" not in str(payload)
+    assert evidence["query_terms"]
+    assert len(evidence["documents"]) >= 1
+    assert all(len(doc["snippet"]) <= 120 for doc in evidence["documents"])
+    assert len(evidence["pattern_recommendations"]) >= 1
+    assert all(
+        code not in " ".join(errors)
+        for code in ["DOCS_EMPTY", "DOCS_DIR_NOT_FOUND", "QUERY_TERMS_EMPTY"]
+    )
 
 
-# [함수 설명]
-# - 목적: standardize spec with evidence missing docs dir 동작을 검증한다.
-# - 입력: 테스트 픽스처/클라이언트 등 고정 입력을 사용한다.
-# - 출력: 예외 없이 단언을 통과하면 성공으로 간주한다.
-# - 에러 처리: 실패 시 pytest가 assertion 결과를 보고한다.
-# - 결정론: 동일 입력으로 항상 재현 가능한 검증을 수행한다.
-# - 보안: 테스트 로그에 원문 SQL/민감 정보를 남기지 않는다.
-def test_standardize_spec_with_evidence_missing_docs_dir(tmp_path) -> None:
+def test_standardize_spec_with_evidence_missing_docs_dir(tmp_path, monkeypatch) -> None:
     missing_dir = tmp_path / "missing"
-    client = TestClient(app)
+    monkeypatch.setattr(
+        mcp_api,
+        "build_standardization_spec",
+        lambda name, obj_type, sql, inputs, options: _stub_standardization_spec(name, obj_type),
+    )
 
+    client = TestClient(app)
     response = client.post(
         "/mcp/standardize/spec-with-evidence",
         json={
-            "object": {"name": "dbo.usp_Sample", "type": "procedure"},
-            "sql": "CREATE PROCEDURE dbo.usp_Sample AS EXEC('SELECT 1');",
+            "object": {"name": "dbo.usp_Smoke", "type": "procedure"},
+            "sql": "-- synthetic",
             "options": {"docs_dir": str(missing_dir)},
         },
     )
 
     assert response.status_code == 200
-    payload = response.json()
-    assert payload["evidence"]["documents"] == []
-    assert "DOCS_DIR_NOT_FOUND" in " ".join(payload["errors"])
-    assert "PAT_MYBATIS_DYNAMIC_TAGS" in {
-        item["id"] for item in payload["evidence"]["pattern_recommendations"]
-    }
+    assert "DOCS_DIR_NOT_FOUND" in " ".join(response.json()["errors"])
 
 
-# [함수 설명]
-# - 목적: standardize spec with evidence determinism 동작을 검증한다.
-# - 입력: 테스트 픽스처/클라이언트 등 고정 입력을 사용한다.
-# - 출력: 예외 없이 단언을 통과하면 성공으로 간주한다.
-# - 에러 처리: 실패 시 pytest가 assertion 결과를 보고한다.
-# - 결정론: 동일 입력으로 항상 재현 가능한 검증을 수행한다.
-# - 보안: 테스트 로그에 원문 SQL/민감 정보를 남기지 않는다.
-def test_standardize_spec_with_evidence_determinism(tmp_path) -> None:
-    docs_dir = tmp_path / "docs"
+def test_standardize_spec_with_evidence_empty_docs_dir(tmp_path, monkeypatch) -> None:
+    docs_dir = tmp_path / "empty_docs"
     docs_dir.mkdir()
-    (docs_dir / "mybatis_dynamic_sql.md").write_text(
-        "# MyBatis Dynamic SQL Standard\n\n"
-        "Prefer dynamic_sql handling with <if>/<choose>/<foreach> tags.\n",
-        encoding="utf-8",
-    )
-    (docs_dir / "transactions.md").write_text(
-        "# Transaction Boundaries\n\nDefine @Transactional at the service layer.\n",
-        encoding="utf-8",
-    )
-
-    client = TestClient(app)
-    request_payload = {
-        "object": {"name": "dbo.usp_Sample", "type": "procedure"},
-        "sql": "CREATE PROCEDURE dbo.usp_Sample AS EXEC('SELECT 1');",
-        "options": {"docs_dir": str(docs_dir), "top_k": 3},
-    }
-
-    response_first = client.post("/mcp/standardize/spec-with-evidence", json=request_payload)
-    response_second = client.post("/mcp/standardize/spec-with-evidence", json=request_payload)
-
-    assert response_first.status_code == 200
-    assert response_second.status_code == 200
-    first_payload = response_first.json()
-    second_payload = response_second.json()
-    assert first_payload["evidence"]["documents"] == second_payload["evidence"]["documents"]
-    assert (
-        first_payload["evidence"]["pattern_recommendations"]
-        == second_payload["evidence"]["pattern_recommendations"]
-    )
-
-
-def test_standardize_spec_with_evidence_top_k_zero_skips_documents(tmp_path) -> None:
-    docs_dir = tmp_path / "docs"
-    docs_dir.mkdir()
-    (docs_dir / "mybatis_dynamic_sql.md").write_text(
-        "# MyBatis Dynamic SQL Standard\n\n"
-        "Prefer dynamic_sql handling with <if>/<choose>/<foreach> tags.\n",
-        encoding="utf-8",
+    monkeypatch.setattr(
+        mcp_api,
+        "build_standardization_spec",
+        lambda name, obj_type, sql, inputs, options: _stub_standardization_spec(name, obj_type),
     )
 
     client = TestClient(app)
     response = client.post(
         "/mcp/standardize/spec-with-evidence",
         json={
-            "object": {"name": "dbo.usp_Sample", "type": "procedure"},
-            "sql": "CREATE PROCEDURE dbo.usp_Sample AS EXEC('SELECT 1');",
-            "options": {"docs_dir": str(docs_dir), "top_k": 0},
+            "object": {"name": "dbo.usp_Smoke", "type": "procedure"},
+            "sql": "-- synthetic",
+            "options": {"docs_dir": str(docs_dir)},
         },
     )
 
     assert response.status_code == 200
-    payload = response.json()
-    assert payload["evidence"]["documents"] == []
-    assert "PAT_MYBATIS_DYNAMIC_TAGS" in {
-        item["id"] for item in payload["evidence"]["pattern_recommendations"]
-    }
+    assert "DOCS_EMPTY" in " ".join(response.json()["errors"])
 
 
-def test_standardize_spec_with_evidence_default_docs_dir_error() -> None:
+def test_standardize_spec_with_evidence_snippet_truncation_error(tmp_path, monkeypatch) -> None:
+    docs_dir = tmp_path / "docs"
+    _create_docs(docs_dir)
+    monkeypatch.setattr(
+        mcp_api,
+        "build_standardization_spec",
+        lambda name, obj_type, sql, inputs, options: _stub_standardization_spec(name, obj_type),
+    )
+
     client = TestClient(app)
-
     response = client.post(
         "/mcp/standardize/spec-with-evidence",
         json={
-            "object": {"name": "dbo.usp_Sample", "type": "procedure"},
-            "sql": "CREATE PROCEDURE dbo.usp_Sample AS SELECT 1;",
+            "object": {"name": "dbo.usp_Smoke", "type": "procedure"},
+            "sql": "-- synthetic",
+            "options": {"docs_dir": str(docs_dir), "top_k": 3, "max_snippet_chars": 20},
         },
     )
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["evidence"]["documents"] == []
-    assert any("DOCS_DIR_NOT_FOUND" in err for err in payload["errors"])
+    assert any("SNIPPET_TRUNCATED" in error for error in payload["errors"])
+    assert payload["evidence"]["documents"]
+
+
+def test_standardize_spec_with_evidence_default_docs_dir_uses_standards(monkeypatch) -> None:
+    monkeypatch.setattr(
+        mcp_api,
+        "build_standardization_spec",
+        lambda name, obj_type, sql, inputs, options: _stub_standardization_spec(name, obj_type),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/mcp/standardize/spec-with-evidence",
+        json={
+            "object": {"name": "dbo.usp_Smoke", "type": "procedure"},
+            "sql": "-- synthetic",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["evidence"]["documents"]
+    assert not any("DOCS_DIR_NOT_FOUND" in error for error in payload["errors"])

@@ -445,7 +445,7 @@
 | --- | --- | --- | --- | --- | --- |
 | object | StandardizeSpecObject | required | - | 대상 객체 |  |
 | sql | string | required | - | 분석 SQL |  |
-| options | StandardizeSpecWithEvidenceOptions | optional | defaults | 문서 옵션 | `docs_dir="data/standard_docs"`, `top_k=5` |
+| options | StandardizeSpecWithEvidenceOptions | optional | defaults | 문서 옵션 | `docs_dir="standards"`, `top_k=5` |
 
 - **응답 스키마 (StandardizeSpecWithEvidenceResponse)**
 
@@ -874,7 +874,7 @@
 #### `StandardizeSpecWithEvidenceOptions`
 | Field | Type | Required | Default | Description | Notes |
 | --- | --- | --- | --- | --- | --- |
-| docs_dir | string | optional | "data/standard_docs" | 문서 디렉터리 |  |
+| docs_dir | string | optional | "standards" | 문서 디렉터리 |  |
 | top_k | int | optional | 5 | 상위 검색 개수 |  |
 | max_snippet_chars | int | optional | 280 | 스니펫 길이 |  |
 
