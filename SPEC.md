@@ -69,6 +69,7 @@
 
 - **결정론/트렁케이션 규칙**
   - 참조 리스트는 정렬/중복 제거됨.
+  - `errors`는 발생 순서를 유지하면서 중복 제거된다.
   - `control_flow.graph`는 `CONTROL_FLOW_NODE_LIMIT(200)`, `CONTROL_FLOW_EDGE_LIMIT(400)` 초과 시 `errors`에 `control_flow_graph_truncated`를 기록.
   - `data_changes.table_operations`는 테이블명 기준 정렬.
 - **안전 규칙**: 원문 SQL 미포함(응답/로그 모두). 로그는 `summarize_sql` 요약만 기록.
