@@ -66,6 +66,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _stable_unique(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        ordered.append(item)
+    return ordered
+
+
 # [클래스 설명]
 # - 역할: AnalyzeRequest Pydantic 스키마 모델을 정의한다.
 # - 사용 위치: API 요청/응답 또는 서비스 내부 구조에서 사용된다.
@@ -1737,7 +1748,7 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     control_flow = analyze_control_flow(request.sql, request.dialect)
     data_changes = analyze_data_changes(request.sql, request.dialect)
     error_handling = analyze_error_handling(request.sql)
-    errors = result["errors"] + control_flow["errors"] + data_changes["errors"]
+    errors = _stable_unique(result["errors"] + control_flow["errors"] + data_changes["errors"])
     return AnalyzeResponse(
         version="0.6",
         references=References(**result["references"]),

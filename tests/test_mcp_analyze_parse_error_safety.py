@@ -33,3 +33,19 @@ def test_mcp_analyze_parse_error_is_deterministic() -> None:
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json() == second.json()
+
+
+def test_mcp_analyze_parse_errors_are_deduplicated() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/mcp/analyze",
+        json={
+            "sql": MALFORMED_SQL,
+            "dialect": "tsql",
+        },
+    )
+
+    assert response.status_code == 200
+    errors = response.json()["errors"]
+    assert len(errors) == len(set(errors))
